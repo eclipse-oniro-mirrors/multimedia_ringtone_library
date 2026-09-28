@@ -952,7 +952,6 @@ int32_t RingtoneScannerObj::Commit()
 
 int32_t RingtoneScannerObj::GetRingToneSourcePath(const char *source, vector<string> &sourcePaths)
 {
-    RINGTONE_DEBUG_LOG("start GetRingToneSourcePath");
 #ifdef USE_CONFIG_POLICY
     CfgFiles *cfgFiles = GetCfgFiles(source);
     if (cfgFiles == nullptr) {
@@ -963,8 +962,6 @@ int32_t RingtoneScannerObj::GetRingToneSourcePath(const char *source, vector<str
     for (int32_t i = MAX_CFG_POLICY_DIRS_CNT - 1; i >= 0; i--) {
         if (cfgFiles->paths[i] && *(cfgFiles->paths[i]) != '\0') {
             sourcePaths.push_back(cfgFiles->paths[i]);
-            RINGTONE_DEBUG_LOG("extra parameter config file path: %{public}s",
-                RingtoneScannerUtils::GetSafePath(cfgFiles->paths[i]).c_str());
         }
     }
     FreeCfgFiles(cfgFiles);
@@ -1160,6 +1157,7 @@ int32_t RingtoneScannerObj::IncrementalScannResource()
     }
     if (IsSupportPocketVibrationEnhancement()) {
         RINGTONE_INFO_LOG("Pocket vibration enhancement is supported, start scanning sim ringtone");
+        
         std::vector<string> ringMockHapticAudioPath;
         GetRingToneSourcePath(RING_MOCK_HAPTIC_AUDIO_RESOURCE_PATH, ringMockHapticAudioPath);
         auto filterRingMockHapticAudioPath = FilterResourcePaths(ringMockHapticAudioPath, g_ringtoneAndVibratePaths);
