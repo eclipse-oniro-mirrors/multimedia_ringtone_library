@@ -292,7 +292,9 @@ static int32_t GetValidUriTab(const Uri &uri, string &tab)
         }
         if (!validTab) {
             uriStr.erase(std::remove_if(uriStr.begin(), uriStr.end(),
-                [](char c){ return c == '\r' || c == '\n'; }), uriStr.end());
+                [](char c) {
+                    return c == '\r' || c == '\n';
+                }), uriStr.end());
             RINGTONE_ERR_LOG("Invalid table name extracted from proxy URI, tab=%{public}s, uri=%{public}s",
                 tab.c_str(), uriStr.c_str());
             return E_INVALID_URI;
@@ -308,7 +310,9 @@ static int32_t GetValidUriTab(const Uri &uri, string &tab)
     }
 
     uriStr.erase(std::remove_if(uriStr.begin(), uriStr.end(),
-        [](char c){ return c == '\r' || c == '\n'; }), uriStr.end());
+        [](char c) {
+            return c == '\r' || c == '\n';
+        }), uriStr.end());
     RINGTONE_INFO_LOG("INVALID uri=%{public}s", uriStr.c_str());
     return E_INVALID_URI;
 }
@@ -326,7 +330,9 @@ static std::string SanitizeUriForLog(const std::string &uriStr)
 {
     std::string sanitized = uriStr;
     sanitized.erase(std::remove_if(sanitized.begin(), sanitized.end(),
-        [](char c){ return c == '\r' || c == '\n'; }), sanitized.end());
+        [](char c) {
+            return c == '\r' || c == '\n';
+        }), sanitized.end());
     return sanitized;
 }
 
