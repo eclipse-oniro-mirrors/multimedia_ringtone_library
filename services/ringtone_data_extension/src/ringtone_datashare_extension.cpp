@@ -765,9 +765,8 @@ void RingtoneDataShareExtension::RingtoneScanner()
         int result = SetParameter(RINGTONE_PARAMETER_SCANNER_FIRST_KEY, RINGTONE_PARAMETER_SCANNER_FIRST_FALSE);
         RINGTONE_WARN_LOG("CheckCurrentUser scanner.first SetParameter false end, result: %{public}d", result);
         // SetParameter 已将值改为 FALSE，无需再次 GetParameter
-        errno_t err = strcpy_s(paramValue, RINGTONEPARA_SIZE, RINGTONE_PARAMETER_SCANNER_FIRST_FALSE);
-        if (err != E_OK) {
-            RINGTONE_ERR_LOG("strcpy_s failed, err: %{public}d", err);
+        if (strcpy_s(paramValue, RINGTONEPARA_SIZE, RINGTONE_PARAMETER_SCANNER_FIRST_FALSE) != ERR_SUCCESS) {
+            RINGTONE_ERR_LOG("strcpy_s failed, errno: %{public}d", errno);
         }
     }
     if (strcmp(paramValue, RINGTONE_PARAMETER_SCANNER_FIRST_FALSE) == 0) {
