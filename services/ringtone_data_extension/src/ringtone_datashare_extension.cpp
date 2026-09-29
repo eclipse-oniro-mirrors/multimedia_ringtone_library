@@ -160,6 +160,7 @@ void RingtoneDataShareExtension::CheckRingtoneDbDefaultSettings()
  */
 void RingtoneDataShareExtension::OnStart(const AAFwk::Want &want)
 {
+    std::lock_guard<std::mutex> lock(onStartMutex_);
     RINGTONE_WARN_LOG("Ringtone OnStart begin.");
     Extension::OnStart(want);
     auto context = AbilityRuntime::Context::GetApplicationContext();
@@ -185,14 +186,11 @@ void RingtoneDataShareExtension::OnStart(const AAFwk::Want &want)
     dataManager->SetOwner(static_pointer_cast<RingtoneDataShareExtension>(shared_from_this()));
     auto dfxMgr = DfxManager::GetInstance();
     dfxMgr->Init(context);
-
     CheckRingtoneDbDefaultSettings();
     RingtoneScanner();
-    
     if (RingtoneFileUtils::IsFileExists(OLD_RINGTONE_CUSTOMIZED_BASE_RINGTONE_PATH)) {
         UpdataRdbPathData();
     }
-
     RingtoneLanguageManager::GetInstance()->SyncAssetLanguage();
     RINGTONE_WARN_LOG("Ringtone OnStart end.");
 }
