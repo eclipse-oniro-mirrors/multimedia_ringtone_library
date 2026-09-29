@@ -104,6 +104,9 @@ private:
         const std::vector<std::string>& ringMockHapticAudioPaths);
     EXPORT int32_t WalkFileTree(const std::string &path, const std::vector<std::string>& vibratePaths,
         const std::vector<std::string>& ringMockHapticAudioPaths);
+    EXPORT int32_t TraverseDirEntries(DIR *dirPath, char *fName, size_t baseLen,
+        const std::vector<std::string>& vibratePaths, const std::vector<std::string>& ringMockHapticAudioPaths,
+        uint32_t &fileCount, uint32_t &dirCount);
     EXPORT int32_t CleanupDirectory();
 
     /* db ops */
