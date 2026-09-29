@@ -72,6 +72,8 @@ void RingtoneScannerTest::SetUpTestCase()
 {
     auto stageContext = std::make_shared<AbilityRuntime::ContextImpl>();
     auto abilityContextImpl = std::make_shared<OHOS::AbilityRuntime::AbilityContextImpl>();
+    ASSERT_TRUE(abilityContextImpl != nullptr);
+
     abilityContextImpl->SetStageContext(stageContext);
     shared_ptr<RingtoneUnistore> uniStore = RingtoneRdbStore::GetInstance(abilityContextImpl);
     int32_t ret = uniStore->Init();
@@ -131,10 +133,10 @@ HWTEST_F(RingtoneScannerTest, scanner_ScanFileInTraversal_test_001, TestSize.Lev
 {
     shared_ptr<IRingtoneScannerCallback> callback = nullptr;
     RingtoneScannerObj ringtoneScannerObj(STORAGE_FILES_DIR, callback, RingtoneScannerObj::DIRECTORY);
-    int32_t ret = ringtoneScannerObj.ScanFileInTraversal(STORAGE_FILES_DIR);
+    int32_t ret = ringtoneScannerObj.ScanFileInTraversal(STORAGE_FILES_DIR, {}, {});
     EXPECT_NE(ret, E_FILE_HIDDEN);
     const string path = "scanner_ScanDirInternal_test_001/.test";
-    ret = ringtoneScannerObj.ScanFileInTraversal(path);
+    ret = ringtoneScannerObj.ScanFileInTraversal(path, {}, {});
     EXPECT_EQ(ret, E_FILE_HIDDEN);
 }
 
@@ -145,12 +147,12 @@ HWTEST_F(RingtoneScannerTest, scanner_WalkFileTree_test_001, TestSize.Level0)
     const int errorPath = 4096;
     const string path(errorPath, 'a');
     RingtoneScannerObj ringtoneScannerObj(dir, callback, RingtoneScannerObj::DIRECTORY);
-    int32_t ret = ringtoneScannerObj.WalkFileTree(path);
+    int32_t ret = ringtoneScannerObj.WalkFileTree(path, {}, {});
     EXPECT_EQ(ret, ERR_INCORRECT_PATH);
     dir = "/storage/media";
     shared_ptr<bool> flag = make_shared<bool>(true);
     ringtoneScannerObj.SetStopFlag(flag);
-    ret = ringtoneScannerObj.WalkFileTree(dir);
+    ret = ringtoneScannerObj.WalkFileTree(dir, {}, {});
     EXPECT_EQ(ret, E_STOP);
 }
 
@@ -196,10 +198,10 @@ HWTEST_F(RingtoneScannerTest, scanner_ScanDir_test_001, TestSize.Level0)
     const string dir = "./scanner_ScanDir_test_001";
     shared_ptr<IRingtoneScannerCallback> callback = nullptr;
     RingtoneScannerObj ringtoneScannerObj(dir, callback, RingtoneScannerObj::DIRECTORY);
-    int32_t ret = ringtoneScannerObj.ScanDir();
+    int32_t ret = ringtoneScannerObj.ScanDir({}, {});
     EXPECT_EQ(ret, E_PERMISSION_DENIED);
     ringtoneScannerObj.dir_ = "scanner_ScanDir_test_001/.test";
-    ret = ringtoneScannerObj.ScanDir();
+    ret = ringtoneScannerObj.ScanDir({}, {});
     EXPECT_EQ(ret, E_DIR_HIDDEN);
 }
 
@@ -241,11 +243,11 @@ HWTEST_F(RingtoneScannerTest, scanner_BuildVibrateData_test_002, TestSize.Level0
     shared_ptr<IRingtoneScannerCallback> callback = nullptr;
     RingtoneScannerObj ringtoneScannerObj(dir, callback, RingtoneScannerObj::DIRECTORY);
     ringtoneScannerObj.path_ = "/sys_prod/resource/media/haptics/map.json";
-    int32_t ret = ringtoneScannerObj.ScanFileInternal();
+    int32_t ret = ringtoneScannerObj.ScanFileInternal({}, {});
     EXPECT_FALSE(ringtoneScannerObj.isVibrateFile_);
 
     ringtoneScannerObj.path_ = "/sys_prod/resource/media/haptics/map.ogg";
-    ret = ringtoneScannerObj.ScanFileInternal();
+    ret = ringtoneScannerObj.ScanFileInternal({}, {});
     EXPECT_EQ(ret, E_INVALID_PATH);
     RINGTONE_INFO_LOG("scanner_BuildVibrateData_test_002 end.");
 }
@@ -312,10 +314,10 @@ HWTEST_F(RingtoneScannerTest, scanner_ScanFileInTraversal_test_002, TestSize.Lev
     RINGTONE_INFO_LOG("scanner_ScanFileInTraversal_test_002 start.");
     shared_ptr<IRingtoneScannerCallback> callback = nullptr;
     RingtoneScannerObj ringtoneScannerObj(STORAGE_FILES_DIR, callback, RingtoneScannerObj::DIRECTORY);
-    int32_t ret = ringtoneScannerObj.ScanFileInTraversal(STORAGE_FILES_DIR);
+    int32_t ret = ringtoneScannerObj.ScanFileInTraversal(STORAGE_FILES_DIR, {}, {});
     EXPECT_NE(ret, E_FILE_HIDDEN);
     const string path = "/sys_prod/variant/region_comm/china/resource/media/haptics/test.ogg";
-    ret = ringtoneScannerObj.ScanFileInTraversal(path);
+    ret = ringtoneScannerObj.ScanFileInTraversal(path, {}, {});
     EXPECT_EQ(ret, E_OK);
     RINGTONE_INFO_LOG("scanner_ScanFileInTraversal_test_002 start.");
 }
@@ -430,7 +432,7 @@ HWTEST_F(RingtoneScannerTest, scanner_ScanDirectories_test_001, TestSize.Level0)
     RINGTONE_INFO_LOG("scanner_ScanDirectories_test_001 start.");
     shared_ptr<IRingtoneScannerCallback> callback = nullptr;
     RingtoneScannerObj ringtoneScannerObj("resource/media/haptics", callback, RingtoneScannerObj::DIRECTORY);
-    int32_t ret = ringtoneScannerObj.ScanDirectories(g_preloadDirs);
+    int32_t ret = ringtoneScannerObj.ScanDirectories(g_preloadDirs, {}, {});
     EXPECT_EQ(ret, E_OK);
     RINGTONE_INFO_LOG("scanner_ScanDirectories_test_001 end.");
 }
@@ -440,7 +442,7 @@ HWTEST_F(RingtoneScannerTest, scanner_ScanDirectories_test_002, TestSize.Level0)
     RINGTONE_INFO_LOG("scanner_ScanDirectories_test_002 start.");
     shared_ptr<IRingtoneScannerCallback> callback = nullptr;
     RingtoneScannerObj ringtoneScannerObj("resource/media/haptics", callback, RingtoneScannerObj::DIRECTORY);
-    int32_t ret = ringtoneScannerObj.ScanDirectories({});
+    int32_t ret = ringtoneScannerObj.ScanDirectories({}, {}, {});
     EXPECT_EQ(ret, E_ERR);
     RINGTONE_INFO_LOG("scanner_ScanDirectories_test_002 end.");
 }
