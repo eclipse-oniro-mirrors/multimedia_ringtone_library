@@ -511,16 +511,24 @@ int32_t RingtoneScannerObj::CommitRingMockHapticAudioTransaction()
     return E_OK;
 }
 
+/**
+ * @brief 递归遍历目录文件树，对每个文件调用 ScanFileInTraversal，对子目录递归遍历。
+ *
+ * 执行流程：
+ * 1. 校验路径长度，分配并初始化 fName 缓冲区（用于拼接子路径，避免循环内反复分配）；
+ * 2. 打开目录，调用 TraverseDirEntries 遍历所有条目；
+ * 3. 关闭目录、释放缓冲区，输出本层遍历的文件数和子目录数统计日志。
+ *
+ * @param path 要遍历的目录路径。
+ * @param vibratePaths 振动资源路径列表（透传给 ScanFileInTraversal）。
+ * @param ringMockHapticAudioPaths 口袋振动音频路径列表（透传给 ScanFileInTraversal）。
+ * @return E_OK 遍历完成；ERR_INCORRECT_PATH 路径过长；E_NO_MEMORY 内存分配失败；
+ *         E_PERMISSION_DENIED 目录无权限打开；E_STOP 扫描被外部停止。
+ */
 int32_t RingtoneScannerObj::WalkFileTree(const string &path, const std::vector<std::string>& vibratePaths,
     const std::vector<std::string>& ringMockHapticAudioPaths)
 {
-    int err = E_OK;
-    DIR *dirPath = nullptr;
-    struct dirent *ent = nullptr;
     size_t len = path.length();
-    struct stat statInfo;
-    uint32_t fileCount = 0;
-    uint32_t dirCount = 0;
     if (len >= FILENAME_MAX - 1) {
         return ERR_INCORRECT_PATH;
     }
@@ -531,10 +539,50 @@ int32_t RingtoneScannerObj::WalkFileTree(const string &path, const std::vector<s
         return E_ERR;
     }
     fName[len++] = '/';
-    if ((dirPath = opendir(path.c_str())) == nullptr) {
+
+    DIR *dirPath = opendir(path.c_str());
+    if (dirPath == nullptr) {
         free(fName);
         return E_PERMISSION_DENIED;
     }
+
+    uint32_t fileCount = 0;
+    uint32_t dirCount = 0;
+    int32_t err = TraverseDirEntries(dirPath, fName, len, vibratePaths, ringMockHapticAudioPaths,
+        fileCount, dirCount);
+    closedir(dirPath);
+    free(fName);
+    RINGTONE_WARN_LOG("WalkFileTree done: dir=%{public}s, files=%{public}u, subdirs=%{public}u",
+        RingtoneScannerUtils::GetSafePath(path.c_str()).c_str(), fileCount, dirCount);
+    return err;
+}
+
+/**
+ * @brief 遍历目录流中的所有条目，对文件和子目录分别分发处理。
+ *
+ * 调用者负责打开/关闭 DIR 和管理 fName 缓冲区。本函数在循环中：
+ * 1. 检查 stopFlag_，若扫描被停止则立即返回 E_STOP；
+ * 2. 跳过 "." 和 ".." 条目；
+ * 3. 将条目名拼接到 fName 基路径上，通过 lstat 获取文件类型；
+ * 4. 子目录：跳过隐藏目录，递归调用 WalkFileTree；
+ * 5. 普通文件：调用 ScanFileInTraversal 执行单文件扫描。
+ *
+ * @param dirPath 已打开的目录流。
+ * @param fName 预分配的路径缓冲区，baseLen 位置之前为父目录路径加 '/'。
+ * @param baseLen fName 中父路径的长度（含末尾 '/'），条目名从此位置开始拼接。
+ * @param vibratePaths 振动资源路径列表（透传给下游）。
+ * @param ringMockHapticAudioPaths 口袋振动音频路径列表（透传给下游）。
+ * @param fileCount 输出参数，累计处理的文件数。
+ * @param dirCount 输出参数，累计处理的子目录数。
+ * @return E_OK 全部条目处理完成；E_STOP 扫描被外部停止。
+ */
+int32_t RingtoneScannerObj::TraverseDirEntries(DIR *dirPath, char *fName, size_t baseLen,
+    const std::vector<std::string>& vibratePaths, const std::vector<std::string>& ringMockHapticAudioPaths,
+    uint32_t &fileCount, uint32_t &dirCount)
+{
+    struct dirent *ent = nullptr;
+    struct stat statInfo;
+    int32_t err = E_OK;
     while ((ent = readdir(dirPath)) != nullptr) {
         if (*stopFlag_) {
             err = E_STOP;
@@ -543,7 +591,7 @@ int32_t RingtoneScannerObj::WalkFileTree(const string &path, const std::vector<s
         if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
             continue;
         }
-        if (strncpy_s(fName + len, FILENAME_MAX - len, ent->d_name, FILENAME_MAX - len)) {
+        if (strncpy_s(fName + baseLen, FILENAME_MAX - baseLen, ent->d_name, FILENAME_MAX - baseLen) != ERR_SUCCESS) {
             RINGTONE_ERR_LOG("Failed to copy file name %{private}s", fName);
             continue;
         }
@@ -563,10 +611,6 @@ int32_t RingtoneScannerObj::WalkFileTree(const string &path, const std::vector<s
             (void)ScanFileInTraversal(currentPath, vibratePaths, ringMockHapticAudioPaths);
         }
     }
-    closedir(dirPath);
-    free(fName);
-    RINGTONE_WARN_LOG("WalkFileTree done: dir=%{public}s, files=%{public}u, subdirs=%{public}u",
-        RingtoneScannerUtils::GetSafePath(path.c_str()).c_str(), fileCount, dirCount);
     return err;
 }
 
