@@ -38,7 +38,7 @@ namespace Media {
 using namespace std;
 using namespace OHOS::AppExecFwk;
 using namespace OHOS::DataShare;
-static const int32_t SCANNER_WAIT_FOR_TIMEOUT = 10000; // ms
+static const int32_t SCANNER_WAIT_FOR_TIMEOUT = 20000; // ms
 static const int32_t PROP_VALUE_MAX = 256;
 static const std::string PATH_PLAY_MODE_SYNC = "/synchronized";
 static const std::string PATH_PLAY_MODE_CLASSIC = "/non-synchronized";
