@@ -72,16 +72,20 @@ private:
         const char *source, std::vector<std::string> &sourcePaths);
     EXPORT std::vector<std::string> BuildRingtoneDirs(const std::vector<std::string>& sourcePaths);
     EXPORT std::vector<std::string> BuildVibrateDirs(const std::vector<std::string>& sourcePaths);
-    EXPORT int32_t ScanDirectories(const std::vector<std::string>& dirs);
+    EXPORT int32_t ScanDirectories(const std::vector<std::string>& dirs,
+        const std::vector<std::string>& vibratePaths, const std::vector<std::string>& ringMockHapticAudioPaths);
     EXPORT int32_t AdditionalVibrateType(const std::vector<std::string>& vibratePaths);
     EXPORT int32_t AdditionalVibratePlayMode(const std::vector<std::string>& vibratePaths);
     EXPORT bool ContainsAnyPath(const std::string& input, const std::vector<std::string>& paths);
     EXPORT int32_t AdditionalToneTypeMap(const std::vector<std::string>& tonePaths);
-    EXPORT int32_t IncrementalScannResource();
+    EXPORT int32_t IncrementalScannResource(const std::vector<std::string>& ringtonePaths,
+        const std::vector<std::string>& vibratePaths, const std::vector<std::string>& ringMockHapticAudioPaths);
 
     /* file */
-    EXPORT int32_t ScanFile();
-    EXPORT int32_t ScanFileInternal();
+    EXPORT int32_t ScanFile(const std::vector<std::string>& vibratePaths,
+        const std::vector<std::string>& ringMockHapticAudioPaths);
+    EXPORT int32_t ScanFileInternal(const std::vector<std::string>& vibratePaths,
+        const std::vector<std::string>& ringMockHapticAudioPaths);
     EXPORT int32_t ScanVibrateFile();
     EXPORT int32_t ScanRingMockHapticAudioFile();
     EXPORT int32_t BuildFileInfo();
@@ -92,10 +96,17 @@ private:
     EXPORT int32_t GetMediaInfo();
 
     /* dir */
-    EXPORT int32_t ScanDir();
-    EXPORT int32_t ScanDirInternal();
-    EXPORT int32_t ScanFileInTraversal(const std::string &path);
-    EXPORT int32_t WalkFileTree(const std::string &path);
+    EXPORT int32_t ScanDir(const std::vector<std::string>& vibratePaths,
+        const std::vector<std::string>& ringMockHapticAudioPaths);
+    EXPORT int32_t ScanDirInternal(const std::vector<std::string>& vibratePaths,
+        const std::vector<std::string>& ringMockHapticAudioPaths);
+    EXPORT int32_t ScanFileInTraversal(const std::string &path, const std::vector<std::string>& vibratePaths,
+        const std::vector<std::string>& ringMockHapticAudioPaths);
+    EXPORT int32_t WalkFileTree(const std::string &path, const std::vector<std::string>& vibratePaths,
+        const std::vector<std::string>& ringMockHapticAudioPaths);
+    EXPORT int32_t TraverseDirEntries(DIR *dirPath, char *fName, size_t baseLen,
+        const std::vector<std::string>& vibratePaths, const std::vector<std::string>& ringMockHapticAudioPaths,
+        uint32_t &fileCount, uint32_t &dirCount);
     EXPORT int32_t CleanupDirectory();
 
     /* db ops */
@@ -128,6 +139,7 @@ private:
     bool isVibrateFile_ = false;
     bool isRingMockHapticAudioFile_ = false;
     bool isForceScan_ = false;
+    bool isSupportPocketVibration_ = false;
     uint32_t tonesScannedCount_ = 0;
     std::mutex scannerLock_;
     std::condition_variable scannerCv_;

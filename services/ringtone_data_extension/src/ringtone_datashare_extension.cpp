@@ -160,7 +160,7 @@ void RingtoneDataShareExtension::CheckRingtoneDbDefaultSettings()
  */
 void RingtoneDataShareExtension::OnStart(const AAFwk::Want &want)
 {
-    RINGTONE_INFO_LOG("Ringtone OnStart begin.");
+    RINGTONE_WARN_LOG("Ringtone OnStart begin.");
     Extension::OnStart(want);
     auto context = AbilityRuntime::Context::GetApplicationContext();
     if (context == nullptr) {
@@ -185,27 +185,24 @@ void RingtoneDataShareExtension::OnStart(const AAFwk::Want &want)
     dataManager->SetOwner(static_pointer_cast<RingtoneDataShareExtension>(shared_from_this()));
     auto dfxMgr = DfxManager::GetInstance();
     dfxMgr->Init(context);
-
     CheckRingtoneDbDefaultSettings();
     RingtoneScanner();
-    
     if (RingtoneFileUtils::IsFileExists(OLD_RINGTONE_CUSTOMIZED_BASE_RINGTONE_PATH)) {
         UpdataRdbPathData();
     }
-
     RingtoneLanguageManager::GetInstance()->SyncAssetLanguage();
-    RINGTONE_INFO_LOG("Ringtone OnStart end.");
+    RINGTONE_WARN_LOG("Ringtone OnStart end.");
 }
 
 void RingtoneDataShareExtension::OnStop()
 {
-    RINGTONE_INFO_LOG("begin.");
+    RINGTONE_WARN_LOG("begin.");
     auto scannerManager = RingtoneScannerManager::GetInstance();
     if (scannerManager != nullptr) {
         scannerManager->Stop();
     }
     RingtoneDataManager::GetInstance()->ClearRingtoneDataMgr();
-    RINGTONE_INFO_LOG("end.");
+    RINGTONE_WARN_LOG("end.");
 }
 
 /**
@@ -760,13 +757,15 @@ void RingtoneDataShareExtension::RingtoneScanner()
     char paramValue[RINGTONEPARA_SIZE] = {0};
     bool currentFlag = CheckCurrentUser();
     GetParameter(RINGTONE_PARAMETER_SCANNER_FIRST_KEY, "", paramValue, RINGTONEPARA_SIZE);
+    RINGTONE_WARN_LOG("GetParameter end, paramValue: %{public}s .", paramValue);
     if (!currentFlag && strcmp(paramValue, RINGTONE_PARAMETER_SCANNER_FIRST_TRUE) == 0) {
         int result = SetParameter(RINGTONE_PARAMETER_SCANNER_FIRST_KEY, RINGTONE_PARAMETER_SCANNER_FIRST_FALSE);
         RINGTONE_WARN_LOG("CheckCurrentUser scanner.first SetParameter false end, result: %{public}d", result);
+        // SetParameter 已将值改为 FALSE，无需再次 GetParameter
+        if (strcpy_s(paramValue, RINGTONEPARA_SIZE, RINGTONE_PARAMETER_SCANNER_FIRST_FALSE) != E_SUCCESS) {
+            RINGTONE_ERR_LOG("strcpy_s failed, errno: %{public}d", errno);
+        }
     }
-    GetParameter(RINGTONE_PARAMETER_SCANNER_FIRST_KEY, "", paramValue, RINGTONEPARA_SIZE);
-    std::string parameter(paramValue);
-    RINGTONE_WARN_LOG("GetParameter end, paramValue: %{public}s .", parameter.c_str());
     if (strcmp(paramValue, RINGTONE_PARAMETER_SCANNER_FIRST_FALSE) == 0) {
         RingtoneScannerManager::GetInstance()->Start(false);
     }
