@@ -16,8 +16,6 @@
 #ifndef FOUNDATION_ABILITYRUNTIME_OHOS_RINGTONE_COLUMN_DATASHARE_EXT_ABILITY_H
 #define FOUNDATION_ABILITYRUNTIME_OHOS_RINGTONE_COLUMN_DATASHARE_EXT_ABILITY_H
 
-#include <mutex>
-
 #include "datashare_ext_ability.h"
 
 namespace OHOS {
@@ -141,7 +139,6 @@ private:
     EXPORT void RingtoneScanner();
     EXPORT static void CheckRingtoneDbDefaultSettings();
     Runtime &runtime_;
-    std::mutex onStartMutex_;
 };
 } // namespace AbilityRuntime
 } // namespace OHOS
