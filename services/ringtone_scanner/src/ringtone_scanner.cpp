@@ -330,7 +330,7 @@ void RingtoneScannerObj::WaitFor()
 int32_t RingtoneScannerObj::ScanDir(const std::vector<std::string>& vibratePaths,
     const std::vector<std::string>& ringMockHapticAudioPaths)
 {
-    RINGTONE_INFO_LOG("scan dir %{public}s", dir_.c_str());
+    RINGTONE_INFO_LOG("scan dir %{private}s", dir_.c_str());
 
     int32_t ret = ScanDirInternal(vibratePaths, ringMockHapticAudioPaths);
     if (ret != E_OK) {
@@ -346,7 +346,7 @@ int32_t RingtoneScannerObj::ScanDirInternal(const std::vector<std::string>& vibr
     const std::vector<std::string>& ringMockHapticAudioPaths)
 {
     if (RingtoneScannerUtils::IsDirHiddenRecursive(dir_)) {
-        RINGTONE_ERR_LOG("the dir %{public}s is hidden", dir_.c_str());
+        RINGTONE_ERR_LOG("the dir %{private}s is hidden", dir_.c_str());
         return E_DIR_HIDDEN;
     }
 
