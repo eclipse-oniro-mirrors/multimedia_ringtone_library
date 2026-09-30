@@ -160,7 +160,6 @@ void RingtoneDataShareExtension::CheckRingtoneDbDefaultSettings()
  */
 void RingtoneDataShareExtension::OnStart(const AAFwk::Want &want)
 {
-    std::lock_guard<std::mutex> lock(onStartMutex_);
     RINGTONE_WARN_LOG("Ringtone OnStart begin.");
     Extension::OnStart(want);
     auto context = AbilityRuntime::Context::GetApplicationContext();
