@@ -26,23 +26,21 @@
 #undef LOG_TAG
 #define LOG_TAG "RingtoneLibrary"
 
-#ifndef LOG_LABEL
-#define LOG_LABEL { LOG_CORE, LOG_DOMAIN, LOG_TAG }
-#endif
-
 #include "hilog/log.h"
 
-#define RINGTONE_HILOG(op, type, fmt, args...) \
+static constexpr OHOS::HiviewDFX::HiLogLabel RINGTONE_LABEL = { LOG_CORE, LOG_DOMAIN, LOG_TAG };
+
+#define RINGTONE_HILOG(func, fmt, args...) \
     do {                                  \
-        op(LOG_CORE, type, LOG_DOMAIN, LOG_TAG, MLOG_TAG ":{%{public}s:%{public}d} " fmt, __FUNCTION__, __LINE__, \
+        func(RINGTONE_LABEL, MLOG_TAG ":{%{public}s:%{public}d} " fmt, __FUNCTION__, __LINE__, \
             ##args);  \
     } while (0)
 
-#define RINGTONE_DEBUG_LOG(fmt, ...) RINGTONE_HILOG(HILOG_IMPL, LOG_DEBUG, fmt, ##__VA_ARGS__)
-#define RINGTONE_ERR_LOG(fmt, ...) RINGTONE_HILOG(HILOG_IMPL, LOG_ERROR, fmt, ##__VA_ARGS__)
-#define RINGTONE_WARN_LOG(fmt, ...) RINGTONE_HILOG(HILOG_IMPL, LOG_WARN, fmt, ##__VA_ARGS__)
-#define RINGTONE_INFO_LOG(fmt, ...) RINGTONE_HILOG(HILOG_IMPL, LOG_INFO, fmt, ##__VA_ARGS__)
-#define RINGTONE_FATAL_LOG(fmt, ...) RINGTONE_HILOG(HILOG_IMPL, LOG_FATAL, fmt, ##__VA_ARGS__)
+#define RINGTONE_DEBUG_LOG(fmt, ...) RINGTONE_HILOG(OHOS::HiviewDFX::HiLog::Debug, fmt, ##__VA_ARGS__)
+#define RINGTONE_ERR_LOG(fmt, ...) RINGTONE_HILOG(OHOS::HiviewDFX::HiLog::Error, fmt, ##__VA_ARGS__)
+#define RINGTONE_WARN_LOG(fmt, ...) RINGTONE_HILOG(OHOS::HiviewDFX::HiLog::Warn, fmt, ##__VA_ARGS__)
+#define RINGTONE_INFO_LOG(fmt, ...) RINGTONE_HILOG(OHOS::HiviewDFX::HiLog::Info, fmt, ##__VA_ARGS__)
+#define RINGTONE_FATAL_LOG(fmt, ...) RINGTONE_HILOG(OHOS::HiviewDFX::HiLog::Fatal, fmt, ##__VA_ARGS__)
 
 #define CHECK_AND_RETURN_RET_LOG(cond, ret, fmt, ...)  \
     do {                                               \
