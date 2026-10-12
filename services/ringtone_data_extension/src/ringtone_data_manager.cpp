@@ -304,7 +304,7 @@ void RingtoneDataManager::CheckSimCard()
 {
     int64_t time = RingtoneFileUtils::UTCTimeSeconds();
     if (RingtoneUtils::GetUpgradeEsimTime() != -1 &&
-        (time == 0 ? 100 : time) - RingtoneUtils::GetUpgradeEsimTime() < 60) {
+        (time == 0 ? 100 : time) - RingtoneUtils::GetUpgradeEsimTime() < 60) { // 100 避免小于60拿不到值情况走逻辑
         RINGTONE_INFO_LOG("active card is not completed.");
         auto rdbStore = RingtoneRdbStore::GetInstance();
         CHECK_AND_RETURN_LOG(rdbStore != nullptr, "rdbstore is nullptr");
