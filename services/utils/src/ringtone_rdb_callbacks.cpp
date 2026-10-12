@@ -349,10 +349,10 @@ struct EsimDefaultToneParam {
 
 // eSIM 默认铃声参数表
 static const EsimDefaultToneParam ESIM_DEFAULT_TONE_PARAMS[] = {
-    { PARAM_RINGTONE_ESIM_CARD_0, "Huawei_Tune_Living.ogg",    ESIM_CARD_1_MASK, true  },
-    { PARAM_RINGTONE_ESIM_CARD_1, "Huawei_Tune_Orchestral.ogg", ESIM_CARD_2_MASK, true  },
-    { PARAM_SYSTEM_TONE_ESIM_CARD_0, "Leap.ogg",                ESIM_CARD_1_MASK, false },
-    { PARAM_SYSTEM_TONE_ESIM_CARD_1, "Leap.ogg",                ESIM_CARD_2_MASK, false },
+    { PARAM_RINGTONE_ESIM_CARD_0, "",    ESIM_CARD_1_MASK, true  },
+    { PARAM_RINGTONE_ESIM_CARD_1, "", ESIM_CARD_2_MASK, true  },
+    { PARAM_SYSTEM_TONE_ESIM_CARD_0, "",                ESIM_CARD_1_MASK, false },
+    { PARAM_SYSTEM_TONE_ESIM_CARD_1, "",                ESIM_CARD_2_MASK, false },
 };
 
 // 对 ToneFiles 表中匹配 display_name 的行，OR 设置 eSIM 卡位比特位（仅当该比特位未设时）
