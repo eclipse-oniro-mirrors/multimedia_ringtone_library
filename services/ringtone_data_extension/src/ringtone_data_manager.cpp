@@ -52,13 +52,13 @@ static int32_t CollectCustomCardMask(NativeRdb::RdbStore &store, const string &t
         " WHERE " + RINGTONE_COLUMN_SOURCE_TYPE + " = " + to_string(SOURCE_TYPE_CUSTOMISED) +
         " AND " + toneTypeColumn + " != 0";
     auto resultSet = store.QuerySql(querySql);
-    int32_t mask = 0;
+    uint32_t mask = 0;
     if (resultSet != nullptr) {
         while (resultSet->GoToNextRow() == NativeRdb::E_OK) {
-            mask |= GetInt32Val(toneTypeColumn, resultSet);
+            mask |= static_cast<uint32_t>(GetInt32Val(toneTypeColumn, resultSet));
         }
     }
-    return mask;
+    return static_cast<int32_t>(mask);
 }
 
 // 清除预置短信铃声记录中与自定义重叠的 shot_tone_type 卡位
@@ -353,11 +353,6 @@ int32_t RingtoneDataManager::Update(RingtoneDataCommand &cmd, const DataShareVal
     if (result != NativeRdb::E_OK || updatedRows <= 0) {
         RINGTONE_ERR_LOG("Update operation failed. Result %{public}d. Updated %{public}d", result, updatedRows);
         updatedRows = E_HAS_DB_ERROR;
-    } else {
-        auto rawRdb = g_uniStore->GetRaw();
-        if (rawRdb != nullptr) {
-            ClearPresetCardBitsIfCustomExists(*rawRdb);
-        }
     }
 
     RINGTONE_DEBUG_LOG("end");
