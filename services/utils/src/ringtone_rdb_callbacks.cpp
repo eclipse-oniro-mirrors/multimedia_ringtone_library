@@ -15,8 +15,10 @@
 
 #include "ringtone_rdb_callbacks.h"
 
+#include <chrono>
 #include <set>
 #include <sys/stat.h>
+#include <thread>
 
 #include "rdb_sql_utils.h"
 #include "ringtone_errno.h"
@@ -28,6 +30,7 @@
 #include "ringtone_utils.h"
 #include "result_set_utils.h"
 #include "preferences_helper.h"
+#include "parameter.h"
 #include "dfx_const.h"
 #ifdef CORE_SERVICE_ENABLE
 #include "core_service_client.h"
@@ -309,6 +312,7 @@ static void AddSoundModeVibrateRecords(NativeRdb::RdbStore &store)
     CHECK_AND_RETURN_LOG(result == E_OK, "init SimCardSetting failed. Result %{public}d.", result);
 }
 
+// 更新预置铃声配置表：将 PreloadConfig 表中各铃声类型的 tone_id 更新为 ToneFiles 表中实际扫描到的铃声 ID
 static void UpdateDefaultSystemTone(NativeRdb::RdbStore &store)
 {
     RINGTONE_INFO_LOG("setting system tone begin");
@@ -333,6 +337,84 @@ static void UpdateDefaultSystemTone(NativeRdb::RdbStore &store)
             RINGTONE_ERR_LOG("Update operation failed. Result %{public}d. Updated %{public}d", result, changedRows);
         }
     }
+}
+
+// eSIM 默认铃声配置项：系统参数键 + 默认文件名 + 卡位掩码 + 铃声类型(来电/短信)
+struct EsimDefaultToneParam {
+    const char *paramKey;
+    const char *defaultValue;
+    int32_t cardMask;
+    bool isRingTone;  // true=来电铃声(ring_tone_type), false=短信铃声(shot_tone_type)
+};
+
+// eSIM 默认铃声参数表
+static const EsimDefaultToneParam ESIM_DEFAULT_TONE_PARAMS[] = {
+    { PARAM_RINGTONE_ESIM_CARD_0, "",    ESIM_CARD_1_MASK, true  },
+    { PARAM_RINGTONE_ESIM_CARD_1, "", ESIM_CARD_2_MASK, true  },
+    { PARAM_SYSTEM_TONE_ESIM_CARD_0, "",                ESIM_CARD_1_MASK, false },
+    { PARAM_SYSTEM_TONE_ESIM_CARD_1, "",                ESIM_CARD_2_MASK, false },
+};
+
+// 对 ToneFiles 表中匹配 display_name 的行，OR 设置 eSIM 卡位比特位（仅当该比特位未设时）
+// 设置前先全表检查：若已有自定义(source_type列=2)记录占用该 eSIM 卡位，则跳过默认值设置
+static void SetEsimToneBitByDisplayName(NativeRdb::RdbStore &store, const string &displayName,
+    int32_t cardMask, bool isRingTone)
+{
+    string typeColumn = isRingTone ? RINGTONE_COLUMN_RING_TONE_TYPE : RINGTONE_COLUMN_SHOT_TONE_TYPE;
+    string sourceTypeColumn = isRingTone ? RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE
+        : RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE;
+    // 全表检查：是否存在自定义(source_type列=2)且已占用该 eSIM 卡位比特位的记录
+    const string checkSql = "SELECT count(1) AS count FROM " + RINGTONE_TABLE +
+        " WHERE " + sourceTypeColumn + " = 2" +
+        " AND (" + typeColumn + " & " + std::to_string(cardMask) + ") != 0";
+    auto resultSet = store.QuerySql(checkSql);
+    if (resultSet == nullptr || resultSet->GoToFirstRow() != NativeRdb::E_OK) {
+        RINGTONE_ERR_LOG("SetEsimToneBitByDisplayName check query failed, cardMask=%{public}d, isRing=%{public}d",
+            cardMask, isRingTone);
+        return;
+    }
+    int32_t count = GetInt32Val("count", resultSet);
+    if (count > 0) {
+        RINGTONE_INFO_LOG("SetEsimToneBitByDisplayName skip: customised tone already set, "
+            "cardMask=%{public}d, isRing=%{public}d, count=%{public}d", cardMask, isRingTone, count);
+        return;
+    }
+    // 条件：display_name 匹配且当前卡位比特位未设
+    // 设置：置位卡位比特；对应 source_type 列置 1(PRESET)；行级 source_type 非 2 时也置 1，保留已有的自定义标记
+    const string updateSql = "UPDATE " + RINGTONE_TABLE + " SET " +
+        typeColumn + " = " + typeColumn + " | " + std::to_string(cardMask) +
+        ", " + sourceTypeColumn + " = 1" +
+        ", " + RINGTONE_COLUMN_SOURCE_TYPE + " = CASE WHEN " + RINGTONE_COLUMN_SOURCE_TYPE +
+        " != 2 THEN 1 ELSE " + RINGTONE_COLUMN_SOURCE_TYPE + " END" +
+        " WHERE " + RINGTONE_COLUMN_DISPLAY_NAME + " = \"" + displayName + "\"" +
+        " AND (" + typeColumn + " & " + std::to_string(cardMask) + ") = 0";
+    int32_t ret = store.ExecuteSql(updateSql);
+    if (ret != E_OK) {
+        RINGTONE_ERR_LOG("SetEsimToneBitByDisplayName failed, cardMask=%{public}d, isRing=%{public}d, ret=%{public}d",
+            cardMask, isRingTone, ret);
+    }
+}
+
+// 从系统参数获取 eSIM 默认铃声，将 ToneFiles 表中无值的 eSIM1/eSIM2 铃声卡位重新初始化
+static void UpdateEsimDefaultSystemToneToToneFile(NativeRdb::RdbStore &store)
+{
+    RINGTONE_INFO_LOG("UpdateEsimDefaultSystemToneToToneFile begin");
+    const int32_t paramSize = 128;
+    for (const auto &param : ESIM_DEFAULT_TONE_PARAMS) {
+        // 从系统参数获取 eSIM 默认铃声文件名
+        char paramValue[paramSize] = {0};
+        GetParameter(param.paramKey, param.defaultValue, paramValue, paramSize);
+        string displayName(paramValue);
+        if (displayName.empty()) {
+            RINGTONE_ERR_LOG("UpdateEsimDefaultSystemToneToToneFile: empty param for %{public}s", param.paramKey);
+            continue;
+        }
+        // 直接通过 display_name 更新 ToneFiles 表，OR 设置 eSIM 卡位比特位
+        SetEsimToneBitByDisplayName(store, displayName, param.cardMask, param.isRingTone);
+        RINGTONE_INFO_LOG("UpdateEsimDefaultSystemToneToToneFile: set %{public}s cardMask=%{public}d isRing=%{public}d",
+            displayName.c_str(), param.cardMask, param.isRingTone);
+    }
+    RINGTONE_INFO_LOG("UpdateEsimDefaultSystemToneToToneFile end");
 }
 
 static void AddVibrateTable(NativeRdb::RdbStore &store)
@@ -490,25 +572,11 @@ static void ClearToneTypeBit(NativeRdb::RdbStore &store, int32_t cardMask)
     RINGTONE_INFO_LOG("ClearToneTypeBit complete, cardMask=%{public}d", cardMask);
 }
 
-// DetectActiveCards: GetActiveSimAccountInfoList ret=0, listSize=2
-// [{"simId":1,"isEsim":false,"slotIndex":0,"simLabelIndex":1,"isActive":true,"iccId":"8986****1924****6716"}]
-// card[0]: isEsim=0, simLabelIndex=2
-static std::vector<SimCardConfigInfo> DetectActiveCards()
-{
-    std::vector<SimCardConfigInfo> config;
 #ifdef CORE_SERVICE_ENABLE
-    std::vector<Telephony::IccAccountInfo> telIccAccountInfoList;
-    int32_t ret = Telephony::CoreServiceClient::GetInstance().GetActiveSimAccountInfoList(telIccAccountInfoList);
-    RINGTONE_INFO_LOG("DetectActiveCards: GetActiveSimAccountInfoList ret=%{public}d, listSize=%{public}zu",
-        ret, telIccAccountInfoList.size());
-    if ((ret != Telephony::TELEPHONY_ERR_SUCCESS) && (ret != Telephony::TELEPHONY_ERR_NO_SIM_CARD)) {
-        RINGTONE_ERR_LOG("GetActiveSimAccountInfoList error, ret=%{public}d", ret);
-        return config;
-    }
-    if (ret == Telephony::TELEPHONY_ERR_NO_SIM_CARD) {
-        RINGTONE_INFO_LOG("No active SIM card");
-        return config;
-    }
+// 从 telIccAccountInfoList 填充 SimCardConfigInfo 列表
+static void FillSimCardConfig(std::vector<SimCardConfigInfo> &config,
+    const std::vector<Telephony::IccAccountInfo> &telIccAccountInfoList)
+{
     for (size_t i = 0; i < telIccAccountInfoList.size(); i++) {
         const auto &telInfo = telIccAccountInfoList[i];
         SimCardConfigInfo simInfo;
@@ -517,10 +585,42 @@ static std::vector<SimCardConfigInfo> DetectActiveCards()
         simInfo.slotIndex = telInfo.slotIndex;
         config.push_back(simInfo);
     }
+}
+#endif
+
+// DetectActiveCards: GetActiveSimAccountInfoList ret=0, listSize=2
+// [{"simId":1,"isEsim":false,"slotIndex":0,"simLabelIndex":1,"isActive":true,"iccId":"8986****1924****6716"}]
+// card[0]: isEsim=0, simLabelIndex=2
+// 当返回 TELEPHONY_ERR_NO_SIM_CARD 时，1s 后重试，最多重试两次
+static int32_t DetectActiveCards(std::vector<SimCardConfigInfo> &config)
+{
+#ifdef CORE_SERVICE_ENABLE
+    const int32_t maxRetry = 2;
+    const int32_t retryIntervalMs = 1000;
+    std::vector<Telephony::IccAccountInfo> telIccAccountInfoList;
+    int32_t ret = Telephony::CoreServiceClient::GetInstance().GetActiveSimAccountInfoList(telIccAccountInfoList);
+    RINGTONE_INFO_LOG("DetectActiveCards: GetActiveSimAccountInfoList ret=%{public}d, listSize=%{public}zu",
+        ret, telIccAccountInfoList.size());
+
+    // 返回 NO_SIM_CARD 时延时重试，最多重试两次
+    for (int32_t retry = 0; ret == Telephony::TELEPHONY_ERR_NO_SIM_CARD && retry < maxRetry; retry++) {
+        RINGTONE_INFO_LOG("DetectActiveCards: no SIM card, retry %{public}d/%{public}d after 1s", retry + 1, maxRetry);
+        std::this_thread::sleep_for(std::chrono::milliseconds(retryIntervalMs));
+        telIccAccountInfoList.clear();
+        ret = Telephony::CoreServiceClient::GetInstance().GetActiveSimAccountInfoList(telIccAccountInfoList);
+        RINGTONE_INFO_LOG("DetectActiveCards: retry ret=%{public}d, listSize=%{public}zu",
+            ret, telIccAccountInfoList.size());
+    }
+
+    if (ret != Telephony::TELEPHONY_ERR_SUCCESS) {
+        RINGTONE_ERR_LOG("GetActiveSimAccountInfoList failed, ret=%{public}d", ret);
+        return E_FAIL;
+    }
+    FillSimCardConfig(config, telIccAccountInfoList);
 #else
     RINGTONE_WARN_LOG("CORE_SERVICE_ENABLE not defined, skip eSIM detection");
 #endif
-    return config;
+    return E_OK;
 }
 
 // ==================== eSIM 迁移处理函数（对应 req.md 11 种场景） ====================
@@ -776,15 +876,13 @@ static void ApplyESimMigration(NativeRdb::RdbStore &store, const std::vector<Sim
     if (configs.empty()) {
         // 场景1：0 张卡
         ESimMigration1(store);
-        return;
-    }
-    if (configs.size() == 1) {
+    } else if (configs.size() == 1) {
         // 单卡场景：分发到场景2~5
         DispatchSingleCard(store, configs[0]);
-        return;
+    } else {
+        // 双卡场景：分发到场景6~11
+        DispatchDualCard(store, configs);
     }
-    // 双卡场景：分发到场景6~11
-    DispatchDualCard(store, configs);
 }
 
 static void AddESimRecords(NativeRdb::RdbStore &store)
@@ -796,10 +894,16 @@ static void AddESimRecords(NativeRdb::RdbStore &store)
     RINGTONE_INFO_LOG("Step1: eSIM SimCardSetting rows inserted");
 
     // Step 2: Detect active SIM configuration and apply data migration
-    std::vector<SimCardConfigInfo> configs = DetectActiveCards();
-    ApplyESimMigration(store, configs);
+    RingtoneUtils::SetUpgradeEsimTime(RingtoneFileUtils::UTCTimeSeconds());
 
     RINGTONE_INFO_LOG("AddESimRecords complete");
+}
+
+void RingtoneDataCallBack::HandleSimRecords(NativeRdb::RdbStore &rdbStore)
+{
+    std::vector<SimCardConfigInfo> configs;
+    DetectActiveCards(configs);
+    ApplyESimMigration(rdbStore, configs);
 }
 
 static bool CheckAndGetDataUri(const string &displayName, const string &dataUri,
@@ -902,6 +1006,7 @@ static void UpdatePreloadConfTable(NativeRdb::RdbStore &store)
     };
     ExecSqls(sqls, store);
     UpdateDefaultSystemTone(store);
+    UpdateEsimDefaultSystemToneToToneFile(store);
 }
 
 static bool VibrateModeIsNull(NativeRdb::RdbStore &store,
@@ -931,8 +1036,8 @@ static bool RingModeHasValue(NativeRdb::RdbStore &store,
         RINGTONE_ERR_LOG("query error");
         return false;
     }
-    int32_t count = GetInt32Val(SIMCARD_SETTING_COLUMN_RING_MODE, resultSet);
-    if (count == 0) {
+    int32_t ringMode = GetInt32Val(SIMCARD_SETTING_COLUMN_RING_MODE, resultSet);
+    if (ringMode == 0) {
         return false;
     }
     return true;
@@ -941,9 +1046,9 @@ static bool RingModeHasValue(NativeRdb::RdbStore &store,
 static void UpdateSimCardSettingESIMValue(NativeRdb::RdbStore &store,
     const string &mode, const string &ringtoneType, const string &modeOld, const string &ringtoneTypeOld)
 {
-    const string upDatesql = "UPDATE SimCardSetting SET (tone_file, vibrate_file)= \
-        (SELECT tone_file, vibrate_file FROM SimCardSetting WHERE mode = ? AND ringtone_type = ?) \
-        WHERE  mode = ? AND ringtone_type = ? ";
+    const string upDatesql = "UPDATE SimCardSetting SET (tone_file, vibrate_file, vibrate_mode, ring_mode)= \
+        (SELECT tone_file, vibrate_file, vibrate_mode, ring_mode FROM SimCardSetting WHERE \
+        mode = ? AND ringtone_type = ?) WHERE  mode = ? AND ringtone_type = ? ";
     vector<NativeRdb::ValueObject> values = {
         NativeRdb::ValueObject(modeOld),
         NativeRdb::ValueObject(ringtoneTypeOld),
@@ -959,6 +1064,7 @@ static void UpdateSimCardSettingESIMValue(NativeRdb::RdbStore &store,
 
 static void UpdateSoundModeVibrateRecords(NativeRdb::RdbStore &store)
 {
+    RINGTONE_INFO_LOG("Update SoundMode Vibrate Begin");
     //判断 mod = 1,ringtonetype = 101 是否存在数据，不存在继承 1，1
     if (VibrateModeIsNull(store, "1", "101")) {
         UpdateSimCardSettingESIMValue(store, "1", "101", "1", "1");

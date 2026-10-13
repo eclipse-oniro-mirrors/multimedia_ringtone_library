@@ -19,6 +19,7 @@
 
 #include "directory_ex.h"
 #include "rdb_utils.h"
+#include "ringtone_db_const.h"
 #include "ringtone_fetch_result.h"
 #include "ringtone_file_utils.h"
 #include "ringtone_log.h"
@@ -26,8 +27,11 @@
 #include "ringtone_rdbstore.h"
 #include "ringtone_scanner_manager.h"
 #include "ringtone_tracer.h"
+#include "ringtone_type.h"
 #include "ringtone_xcollie.h"
 #include "ringtone_utils.h"
+#include "result_set_utils.h"
+#include "ringtone_rdb_callbacks.h"
 
 namespace OHOS {
 namespace Media {
@@ -40,6 +44,77 @@ using namespace OHOS::RdbDataShareAdapter;
 shared_ptr<RingtoneDataManager> RingtoneDataManager::instance_ = nullptr;
 mutex RingtoneDataManager::mutex_;
 shared_ptr<RingtoneUnistore> g_uniStore = nullptr;
+
+// 收集自定义记录(source_type=2)中指定列的卡位 OR 合集
+static int32_t CollectCustomCardMask(NativeRdb::RdbStore &store, const string &toneTypeColumn)
+{
+    const string querySql = "SELECT " + toneTypeColumn + " FROM " + RINGTONE_TABLE +
+        " WHERE " + RINGTONE_COLUMN_SOURCE_TYPE + " = " + to_string(SOURCE_TYPE_CUSTOMISED) +
+        " AND " + toneTypeColumn + " != 0";
+    auto resultSet = store.QuerySql(querySql);
+    uint32_t mask = 0;
+    if (resultSet != nullptr) {
+        while (resultSet->GoToNextRow() == NativeRdb::E_OK) {
+            mask |= static_cast<uint32_t>(GetInt32Val(toneTypeColumn, resultSet));
+        }
+    }
+    return static_cast<int32_t>(mask);
+}
+
+// 清除预置短信铃声记录中与自定义重叠的 shot_tone_type 卡位
+static void ClearPresetShotToneCardBits(NativeRdb::RdbStore &store)
+{
+    int32_t customMask = CollectCustomCardMask(store, RINGTONE_COLUMN_SHOT_TONE_TYPE);
+    RINGTONE_INFO_LOG("ClearPresetShotToneCardBits: customMask=%{public}d", customMask);
+    if (customMask == 0) {
+        return;
+    }
+    const string updateSql =
+        "UPDATE " + RINGTONE_TABLE + " SET " +
+        RINGTONE_COLUMN_SHOT_TONE_TYPE + " = " +
+        RINGTONE_COLUMN_SHOT_TONE_TYPE + " & ~?" +
+        " WHERE " + RINGTONE_COLUMN_SHOT_TONE_TYPE + " & ? != 0" +
+        " AND " + RINGTONE_COLUMN_SOURCE_TYPE + " = ?" +
+        " AND " + RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE + " = ?";
+    int32_t ret = store.ExecuteSql(updateSql,
+        { NativeRdb::ValueObject(customMask), NativeRdb::ValueObject(customMask),
+          NativeRdb::ValueObject(SOURCE_TYPE_PRESET), NativeRdb::ValueObject(SOURCE_TYPE_PRESET) });
+    if (ret != E_OK) {
+        RINGTONE_ERR_LOG("ClearPresetShotToneCardBits failed, ret=%{public}d", ret);
+    }
+}
+
+// 清除预置来电铃声记录中与自定义重叠的 ring_tone_type 卡位
+static void ClearPresetRingToneCardBits(NativeRdb::RdbStore &store)
+{
+    int32_t customMask = CollectCustomCardMask(store, RINGTONE_COLUMN_RING_TONE_TYPE);
+    RINGTONE_INFO_LOG("ClearPresetRingToneCardBits: customMask=%{public}d", customMask);
+    if (customMask == 0) {
+        return;
+    }
+    const string updateSql =
+        "UPDATE " + RINGTONE_TABLE + " SET " +
+        RINGTONE_COLUMN_RING_TONE_TYPE + " = " +
+        RINGTONE_COLUMN_RING_TONE_TYPE + " & ~?" +
+        " WHERE " + RINGTONE_COLUMN_RING_TONE_TYPE + " & ? != 0" +
+        " AND " + RINGTONE_COLUMN_SOURCE_TYPE + " = ?" +
+        " AND " + RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE + " = ?";
+    int32_t ret = store.ExecuteSql(updateSql,
+        { NativeRdb::ValueObject(customMask), NativeRdb::ValueObject(customMask),
+          NativeRdb::ValueObject(SOURCE_TYPE_PRESET), NativeRdb::ValueObject(SOURCE_TYPE_PRESET) });
+    if (ret != E_OK) {
+        RINGTONE_ERR_LOG("ClearPresetRingToneCardBits failed, ret=%{public}d", ret);
+    }
+}
+
+// 清除预置记录中与自定义铃声重叠的卡位：短信和来电分别处理
+static void ClearPresetCardBitsIfCustomExists(NativeRdb::RdbStore &store)
+{
+    RINGTONE_INFO_LOG("ClearPresetCardBitsIfCustomExists start");
+    ClearPresetShotToneCardBits(store);
+    ClearPresetRingToneCardBits(store);
+    RINGTONE_INFO_LOG("ClearPresetCardBitsIfCustomExists complete");
+}
 
 RingtoneDataManager::RingtoneDataManager(void)
 {
@@ -63,7 +138,7 @@ shared_ptr<RingtoneDataManager> RingtoneDataManager::GetInstance()
 
 int32_t RingtoneDataManager::Init(const shared_ptr<OHOS::AbilityRuntime::Context> &context)
 {
-    RINGTONE_DEBUG_LOG("Init start");
+    RINGTONE_DEBUG_LOG("start");
     lock_guard<shared_mutex> lock(mgrSharedMutex_);
 
     if (refCnt_.load() > 0) {
@@ -82,7 +157,7 @@ int32_t RingtoneDataManager::Init(const shared_ptr<OHOS::AbilityRuntime::Context
     RingtoneMimeTypeUtils::InitMimeTypeMap();
     refCnt_++;
 
-    RINGTONE_DEBUG_LOG("Init end");
+    RINGTONE_DEBUG_LOG("end");
     return E_OK;
 }
 
@@ -225,6 +300,21 @@ int32_t RingtoneDataManager::Delete(RingtoneDataCommand &cmd, const DataSharePre
     return deletedRows;
 }
 
+void RingtoneDataManager::CheckSimCard()
+{
+    int64_t time = RingtoneFileUtils::UTCTimeSeconds();
+    if (RingtoneUtils::GetUpgradeEsimTime() != -1 &&
+        (time == 0 ? 100 : time) - RingtoneUtils::GetUpgradeEsimTime() < 60) { // 100 避免小于60拿不到值情况走逻辑
+        RINGTONE_INFO_LOG("active card is not completed.");
+        auto rdbStore = RingtoneRdbStore::GetInstance();
+        CHECK_AND_RETURN_LOG(rdbStore != nullptr, "rdbstore is nullptr");
+        auto rawRdb = rdbStore->GetRaw();
+        CHECK_AND_RETURN_LOG(rawRdb != nullptr, "rawRdb is nullptr");
+        RingtoneDataCallBack::HandleSimRecords(*rawRdb);
+    }
+    RingtoneUtils::SetUpgradeEsimTime(-1);
+}
+
 int32_t RingtoneDataManager::Update(RingtoneDataCommand &cmd, const DataShareValuesBucket &dataShareValue,
     const DataSharePredicates &predicates)
 {
@@ -240,16 +330,23 @@ int32_t RingtoneDataManager::Update(RingtoneDataCommand &cmd, const DataShareVal
     }
 
     ValuesBucket value = RdbUtils::ToValuesBucket(dataShareValue);
-    if (value.IsEmpty()) {
-        RINGTONE_ERR_LOG("RingtoneDataManager Update:Input parameter is invalid");
-        return E_INVALID_VALUES;
-    }
-
     cmd.SetValueBucket(value);
     cmd.SetDataSharePred(predicates);
     NativeRdb::RdbPredicates rdbPredicate = RdbUtils::ToPredicates(predicates, cmd.GetTableName());
     cmd.GetAbsRdbPredicates()->SetWhereClause(rdbPredicate.GetWhereClause());
     cmd.GetAbsRdbPredicates()->SetWhereArgs(rdbPredicate.GetWhereArgs());
+    if (rdbPredicate.GetWhereClause() == "isUpdateSimCard") {
+        CheckSimCard();
+        auto rawRdb = g_uniStore->GetRaw();
+        if (rawRdb != nullptr) {
+            ClearPresetCardBitsIfCustomExists(*rawRdb);
+        }
+        return E_OK;
+    }
+    if (value.IsEmpty()) {
+        RINGTONE_ERR_LOG("RingtoneDataManager Update:Input parameter is invalid");
+        return E_INVALID_VALUES;
+    }
 
     int32_t updatedRows = E_HAS_DB_ERROR;
     int32_t result = g_uniStore->Update(cmd, updatedRows);

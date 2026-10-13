@@ -28,6 +28,17 @@ public:
     EXPORT ~RingtoneDataCallBack();
     EXPORT int32_t OnCreate(NativeRdb::RdbStore &rdbStore) override;
     EXPORT int32_t OnUpgrade(NativeRdb::RdbStore &rdbStore, int32_t oldVersion, int32_t newVersion) override;
+    EXPORT static void HandleSimRecords(NativeRdb::RdbStore &rdbStore);
+private:
+    static int32_t InitSql(NativeRdb::RdbStore &store);
+};
+
+class RingtoneDataNullCallBack : public NativeRdb::RdbOpenCallback {
+public:
+    EXPORT RingtoneDataNullCallBack();
+    EXPORT ~RingtoneDataNullCallBack();
+    EXPORT int32_t OnCreate(NativeRdb::RdbStore &rdbStore) override;
+    EXPORT int32_t OnUpgrade(NativeRdb::RdbStore &rdbStore, int32_t oldVersion, int32_t newVersion) override;
 private:
     static int32_t InitSql(NativeRdb::RdbStore &store);
 };

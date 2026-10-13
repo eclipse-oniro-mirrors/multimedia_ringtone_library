@@ -32,6 +32,8 @@ public:
     static bool IsNumber(const std::string &str);
     static int64_t GetFreeSize();
     static bool CheckRemainSpaceMeetCondition();
+    static void SetUpgradeEsimTime(int64_t value);
+    static int64_t GetUpgradeEsimTime();
 };
 } // namespace Media
 } // namespace OHOS
