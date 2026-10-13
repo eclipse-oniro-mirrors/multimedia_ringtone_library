@@ -21,8 +21,6 @@
 
 namespace OHOS {
 namespace Media {
-static const int RINGTONE_PARAMETER_ACTIVE_CARDS_COMPLETED_FALSE = 0;
-static const int RINGTONE_PARAMETER_ACTIVE_CARDS_COMPLETED_TRUE = 1;
 class RingtoneUtils {
 public:
     static std::string ReplaceAll(std::string str, const std::string &oldValue, const std::string &newValue);
@@ -34,7 +32,7 @@ public:
     static bool IsNumber(const std::string &str);
     static int64_t GetFreeSize();
     static bool CheckRemainSpaceMeetCondition();
-    static void SetUpgradeEsimTime(int64_t value);  
+    static void SetUpgradeEsimTime(int64_t value);
     static int64_t GetUpgradeEsimTime();
 };
 } // namespace Media
