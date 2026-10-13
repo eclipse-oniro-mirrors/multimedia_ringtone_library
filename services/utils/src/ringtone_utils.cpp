@@ -42,6 +42,20 @@ static const int32_t RDB_AREA_EL2 = 2;
 constexpr int32_t MAX_SIZE = 9;
 const std::string DATA_PATH = "/data/storage/el2/base";
 const int64_t STORAGE_500MB = 500000000;
+static const char RINGTONE_PARAMETER_UPGRADE_ESIM_TIME_KEY[] = "ringtone.upgrade.esim.time";
+
+static const tuple<const char *, int, const char *> DEFAULT_SYSTEMTONE_PARAM_MAP[] = {
+    { PARAM_RINGTONE_SETTING_RINGTONE, DEFAULT_RING_TYPE_SIM_CARD_1, "Huawei_Tune_Harmony.ogg" },
+    { PARAM_RINGTONE_SETTING_RINGTONE2, DEFAULT_RING_TYPE_SIM_CARD_2, "Huawei_Tune_Clean.ogg" },
+    { PARAM_RINGTONE_SETTING_SHOT, DEFAULT_SHOT_TYPE_SIM_CARD_1, "Leap.ogg" },
+    { PARAM_RINGTONE_SETTING_SHOT2, DEFAULT_SHOT_TYPE_SIM_CARD_2, "Leap.ogg" },
+    { PARAM_RINGTONE_SETTING_NOTIFICATIONTONE, DEFAULT_NOTIFICATION_TYPE, "Rise.ogg" },
+    { PARAM_RINGTONE_SETTING_ALARM, DEFAULT_ALARM_TYPE, "Flourish.ogg" },
+    { PARAM_RINGTONE_ESIM_CARD_0, DEFAULT_RING_TYPE_ESIM_CARD_1, "Huawei_Tune_Living.ogg" },
+    { PARAM_RINGTONE_ESIM_CARD_1, DEFAULT_RING_TYPE_ESIM_CARD_2, "Huawei_Tune_Orchestral.ogg" },
+    { PARAM_SYSTEM_TONE_ESIM_CARD_0, DEFAULT_SHOT_TYPE_ESIM_CARD_1, "Leap.ogg" },
+    { PARAM_SYSTEM_TONE_ESIM_CARD_1, DEFAULT_SHOT_TYPE_ESIM_CARD_2, "Leap.ogg" },
+};
 
 std::string RingtoneUtils::ReplaceAll(std::string str, const std::string &oldValue, const std::string &newValue)
 {
@@ -57,30 +71,17 @@ std::string RingtoneUtils::ReplaceAll(std::string str, const std::string &oldVal
 
 std::map<int, std::string> RingtoneUtils::GetDefaultSystemtoneInfo()
 {
-    static const pair<const char *, int> paramKeyMap[] = {
-        { PARAM_RINGTONE_SETTING_RINGTONE, DEFAULT_RING_TYPE_SIM_CARD_1 },
-        { PARAM_RINGTONE_SETTING_RINGTONE2, DEFAULT_RING_TYPE_SIM_CARD_2 },
-        { PARAM_RINGTONE_SETTING_SHOT, DEFAULT_SHOT_TYPE_SIM_CARD_1 },
-        { PARAM_RINGTONE_SETTING_SHOT2, DEFAULT_SHOT_TYPE_SIM_CARD_2 },
-        { PARAM_RINGTONE_SETTING_NOTIFICATIONTONE, DEFAULT_NOTIFICATION_TYPE },
-        { PARAM_RINGTONE_SETTING_ALARM, DEFAULT_ALARM_TYPE },
-        { PARAM_RINGTONE_ESIM_CARD_0, DEFAULT_RING_TYPE_ESIM_CARD_1 },
-        { PARAM_RINGTONE_ESIM_CARD_1, DEFAULT_RING_TYPE_ESIM_CARD_2 },
-        { PARAM_SYSTEM_TONE_ESIM_CARD_0, DEFAULT_SHOT_TYPE_ESIM_CARD_1 },
-        { PARAM_SYSTEM_TONE_ESIM_CARD_1, DEFAULT_SHOT_TYPE_ESIM_CARD_2 },
-    };
     map<int, string> defaultSystemtoneInfo;
     char paramValue[SYSPARA_SIZE] = {0};
-    for (const auto &[paramKey, defaultType] : paramKeyMap) {
+    for (const auto &[paramKey, defaultType, defaultValue] : DEFAULT_SYSTEMTONE_PARAM_MAP) {
         if (memset_s(paramValue, sizeof(paramValue), 0, sizeof(paramValue)) != 0) {
             continue;
         }
-        GetParameter(paramKey, "", paramValue, SYSPARA_SIZE);
+        GetParameter(paramKey, defaultValue, paramValue, SYSPARA_SIZE);
         if (strlen(paramValue) > 0) {
             defaultSystemtoneInfo.insert(make_pair(defaultType, string(paramValue)));
         }
     }
-
     return defaultSystemtoneInfo;
 }
 
@@ -109,6 +110,33 @@ int32_t RingtoneUtils::ChecMoveDb()
     }
     RingtoneUtils::SetMoveEL2DBToEL1();
     return E_OK;
+}
+
+void RingtoneUtils::SetUpgradeEsimTime(int64_t value)
+{
+    int32_t errCode;
+    shared_ptr<NativePreferences::Preferences> prefs =
+        NativePreferences::PreferencesHelper::GetPreferences(COMMON_XML_EL1, errCode);
+    if (!prefs) {
+        RINGTONE_ERR_LOG("get ringtone_common.xml faild errCode=%{public}d", errCode);
+    } else {
+        prefs->PutLong(RINGTONE_PARAMETER_UPGRADE_ESIM_TIME_KEY, value);
+        prefs->FlushSync();
+    }
+}
+ 
+int64_t RingtoneUtils::GetUpgradeEsimTime()
+{
+    int32_t errCode;
+    shared_ptr<NativePreferences::Preferences> prefs =
+        NativePreferences::PreferencesHelper::GetPreferences(COMMON_XML_EL1, errCode);
+    int64_t result = -1;
+    if (!prefs) {
+        RINGTONE_ERR_LOG("get ringtone_common.xml faild errCode=%{public}d", errCode);
+    } else {
+        result = prefs->GetLong(RINGTONE_PARAMETER_UPGRADE_ESIM_TIME_KEY, -1);
+    }
+    return result;
 }
 
 int32_t RingtoneUtils::CheckNeedScanner(const std::string &xmlFilePath)
