@@ -29,7 +29,7 @@ public:
     static int32_t InitDb(std::shared_ptr<NativeRdb::RdbStore> &rdbStore, const std::string &dbName,
         const std::string &dbPath, const std::string &bundleName, bool isMediaLibary);
     static int32_t InitRestoreDb(std::shared_ptr<NativeRdb::RdbStore> &rdbStore, const std::string &dbName,
-        const std::string &dbPath, const std::string &bundleName, bool isMediaLibary);    
+        const std::string &dbPath, const std::string &bundleName, bool isMediaLibary);
     static int32_t QueryInt(std::shared_ptr<NativeRdb::RdbStore> rdbStore, const std::string &sql,
         const std::string &column);
     static int32_t Update(std::shared_ptr<NativeRdb::RdbStore> &rdbStore, int32_t &changeRows,
