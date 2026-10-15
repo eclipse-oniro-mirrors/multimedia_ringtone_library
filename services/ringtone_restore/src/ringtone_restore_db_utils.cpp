@@ -335,7 +335,7 @@ int32_t RingtoneRestoreDbUtils::CleanESimData(const std::string &dbPath, int32_t
 {
     RINGTONE_INFO_LOG("CleanESimData enter, dbPath: %{private}s, peerSlotNum: %{public}d, "
         "ringtoneBasePath: %{private}s", dbPath.c_str(), peerSlotNum, ringtoneBasePath.c_str());
-    if (peerSlotNum <= 0 || peerSlotNum > 4) {
+    if (peerSlotNum <= 0 || peerSlotNum > 4) { // 4 PEER_SLOT_NUM
         RINGTONE_ERR_LOG("Invalid peerSlotNum: %{public}d", peerSlotNum);
         return E_FAIL;
     }
