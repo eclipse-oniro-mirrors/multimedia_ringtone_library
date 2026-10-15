@@ -32,7 +32,6 @@ const std::string CUSTOM_COUNT = "count";
 const std::string PRAGMA_TABLE_NAME = "name";
 const std::string PRAGMA_TABLE_TYPE = "type";
 const int RDB_AREA_EL1 = 0;
-const int PEER_SLOT_NUM = 4;
 int32_t RingtoneRestoreDbUtils::InitDb(std::shared_ptr<NativeRdb::RdbStore> &rdbStore, const std::string &dbName,
     const std::string &dbPath, const std::string &bundleName, bool isMediaLibrary)
 {
@@ -45,6 +44,22 @@ int32_t RingtoneRestoreDbUtils::InitDb(std::shared_ptr<NativeRdb::RdbStore> &rdb
 
     int32_t err;
     RingtoneDataCallBack cb;
+    rdbStore = NativeRdb::RdbHelper::GetRdbStore(config, RINGTONE_RDB_VERSION, cb, err);
+    return err;
+}
+
+int32_t RingtoneRestoreDbUtils::InitRestoreDb(std::shared_ptr<NativeRdb::RdbStore> &rdbStore, const std::string &dbName,
+    const std::string &dbPath, const std::string &bundleName, bool isMediaLibrary)
+{
+    NativeRdb::RdbStoreConfig config(dbName);
+    config.SetPath(dbPath);
+    config.SetBundleName(bundleName);
+    config.SetReadConSize(CONNECT_SIZE);
+    config.SetSecurityLevel(NativeRdb::SecurityLevel::S3);
+    config.SetArea(RDB_AREA_EL1);
+
+    int32_t err;
+    RingtoneDataNullCallBack cb;
     rdbStore = NativeRdb::RdbHelper::GetRdbStore(config, RINGTONE_RDB_VERSION, cb, err);
     return err;
 }
@@ -320,7 +335,7 @@ int32_t RingtoneRestoreDbUtils::CleanESimData(const std::string &dbPath, int32_t
 {
     RINGTONE_INFO_LOG("CleanESimData enter, dbPath: %{private}s, peerSlotNum: %{public}d, "
         "ringtoneBasePath: %{private}s", dbPath.c_str(), peerSlotNum, ringtoneBasePath.c_str());
-    if (peerSlotNum <= 0 || peerSlotNum > PEER_SLOT_NUM) {
+    if (peerSlotNum <= 0 || peerSlotNum > 4) {
         RINGTONE_ERR_LOG("Invalid peerSlotNum: %{public}d", peerSlotNum);
         return E_FAIL;
     }
