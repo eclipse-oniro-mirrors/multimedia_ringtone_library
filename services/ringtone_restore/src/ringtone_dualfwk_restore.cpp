@@ -380,6 +380,8 @@ int32_t RingtoneDualFwkRestore::StartRestore()
     if (ret != E_OK) {
         return ret;
     }
+    // 在修改本地DB前，缓存B机初始"无铃声"状态，供后续NeedCommitSetting*判断使用
+    CacheInitialNoRingtoneState();
 
     ret = HandleUpgradeWithESim();
     if (ret != E_OK) {

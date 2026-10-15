@@ -107,6 +107,108 @@ int32_t RingtoneRestoreBase::StartRestore()
     return E_OK;
 }
 
+void RingtoneRestoreBase::CacheInitialNoRingtoneState()
+{
+    if (localRdb_ == nullptr) {
+        RINGTONE_ERR_LOG("localRdb_ is null, cannot cache initial state");
+        return;
+    }
+    initialNoAlarm_ = IsDetermineNoRingtoneForAlarm(localRdb_);
+    initialNoNotification_ = IsDetermineNoRingtoneForNotification(localRdb_);
+    static const std::vector<int32_t> ringCardTypes = {
+        RING_TONE_TYPE_SIM_CARD_1, RING_TONE_TYPE_SIM_CARD_2,
+        RING_TONE_TYPE_ESIM_CARD_1, RING_TONE_TYPE_ESIM_CARD_2};
+    for (auto cardType : ringCardTypes) {
+        std::string key = RINGTONE_COLUMN_RING_TONE_TYPE + ":" + std::to_string(cardType);
+        initialNoRingtoneMap_[key] = IsDetermineNoRingtone(
+            RINGTONE_COLUMN_RING_TONE_TYPE, RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE, cardType, localRdb_);
+    }
+    static const std::vector<int32_t> shotCardTypes = {
+        SHOT_TONE_TYPE_SIM_CARD_1, SHOT_TONE_TYPE_SIM_CARD_2,
+        SHOT_TONE_TYPE_ESIM_CARD_1, SHOT_TONE_TYPE_ESIM_CARD_2};
+    for (auto cardType : shotCardTypes) {
+        std::string key = RINGTONE_COLUMN_SHOT_TONE_TYPE + ":" + std::to_string(cardType);
+        initialNoRingtoneMap_[key] = IsDetermineNoRingtone(
+            RINGTONE_COLUMN_SHOT_TONE_TYPE, RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE, cardType, localRdb_);
+    }
+    RINGTONE_INFO_LOG("CacheInitialNoRingtoneState: alarm=%{public}d, notification=%{public}d, mapSize=%{public}zu",
+        initialNoAlarm_, initialNoNotification_, initialNoRingtoneMap_.size());
+}
+
+// 收集自定义记录(source_type=2)中指定列的卡位 OR 合集
+static int32_t CollectCustomCardMask(NativeRdb::RdbStore &store, const string &toneTypeColumn)
+{
+    const string querySql = "SELECT " + toneTypeColumn + " FROM " + RINGTONE_TABLE +
+        " WHERE " + RINGTONE_COLUMN_SOURCE_TYPE + " = " + to_string(SOURCE_TYPE_CUSTOMISED) +
+        " AND " + toneTypeColumn + " != 0";
+    auto resultSet = store.QuerySql(querySql);
+    uint32_t mask = 0;
+    if (resultSet != nullptr) {
+        while (resultSet->GoToNextRow() == NativeRdb::E_OK) {
+            mask |= static_cast<uint32_t>(GetInt32Val(toneTypeColumn, resultSet));
+        }
+    }
+    return static_cast<int32_t>(mask);
+}
+
+// 清除预置短信铃声记录中与自定义重叠的 shot_tone_type 卡位
+static void ClearPresetShotToneCardBits(NativeRdb::RdbStore &store)
+{
+    int32_t customMask = CollectCustomCardMask(store, RINGTONE_COLUMN_SHOT_TONE_TYPE);
+    RINGTONE_INFO_LOG("ClearPresetShotToneCardBits: customMask=%{public}d", customMask);
+    if (customMask == 0) {
+        return;
+    }
+    const string updateSql =
+        "UPDATE " + RINGTONE_TABLE + " SET " +
+        RINGTONE_COLUMN_SHOT_TONE_TYPE + " = " +
+        RINGTONE_COLUMN_SHOT_TONE_TYPE + " & ~?" +
+        " WHERE " + RINGTONE_COLUMN_SHOT_TONE_TYPE + " & ? != 0" +
+        " AND " + RINGTONE_COLUMN_SOURCE_TYPE + " = ?" +
+        " AND " + RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE + " = ?";
+    int32_t ret = store.ExecuteSql(updateSql,
+        { NativeRdb::ValueObject(customMask), NativeRdb::ValueObject(customMask),
+          NativeRdb::ValueObject(SOURCE_TYPE_PRESET), NativeRdb::ValueObject(SOURCE_TYPE_PRESET) });
+    if (ret != E_OK) {
+        RINGTONE_ERR_LOG("ClearPresetShotToneCardBits failed, ret=%{public}d", ret);
+    }
+}
+
+// 清除预置来电铃声记录中与自定义重叠的 ring_tone_type 卡位
+static void ClearPresetRingToneCardBits(NativeRdb::RdbStore &store)
+{
+    int32_t customMask = CollectCustomCardMask(store, RINGTONE_COLUMN_RING_TONE_TYPE);
+    RINGTONE_INFO_LOG("ClearPresetRingToneCardBits: customMask=%{public}d", customMask);
+    if (customMask == 0) {
+        return;
+    }
+    const string updateSql =
+        "UPDATE " + RINGTONE_TABLE + " SET " +
+        RINGTONE_COLUMN_RING_TONE_TYPE + " = " +
+        RINGTONE_COLUMN_RING_TONE_TYPE + " & ~?" +
+        " WHERE " + RINGTONE_COLUMN_RING_TONE_TYPE + " & ? != 0" +
+        " AND " + RINGTONE_COLUMN_SOURCE_TYPE + " = ?" +
+        " AND " + RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE + " = ?";
+    int32_t ret = store.ExecuteSql(updateSql,
+        { NativeRdb::ValueObject(customMask), NativeRdb::ValueObject(customMask),
+          NativeRdb::ValueObject(SOURCE_TYPE_PRESET), NativeRdb::ValueObject(SOURCE_TYPE_PRESET) });
+    if (ret != E_OK) {
+        RINGTONE_ERR_LOG("ClearPresetRingToneCardBits failed, ret=%{public}d", ret);
+    }
+}
+
+void RingtoneRestoreBase::ClearPresetCardBitsByCustom()
+{
+    if (localRdb_ == nullptr) {
+        RINGTONE_ERR_LOG("localRdb_ is null, cannot clear preset card bits");
+        return;
+    }
+    RINGTONE_INFO_LOG("ClearPresetCardBitsByCustom start");
+    ClearPresetShotToneCardBits(*localRdb_);
+    ClearPresetRingToneCardBits(*localRdb_);
+    RINGTONE_INFO_LOG("ClearPresetCardBitsByCustom complete");
+}
+
 bool RingtoneRestoreBase::MoveFile(const std::string &src, const std::string &dst)
 {
     if (RingtoneFileUtils::MoveFile(src, dst)) {
@@ -158,6 +260,11 @@ bool RingtoneRestoreBase::NeedCommitSetting(const std::string &typeColumn, const
     if (HasCustomisedSetting(typeColumn, sourceColumn, cardBitType)) {
         return false;
     }
+    std::string key = typeColumn + ":" + std::to_string(cardBitType);
+    auto it = initialNoRingtoneMap_.find(key);
+    if (it != initialNoRingtoneMap_.end()) {
+        return !it->second;
+    }
     return !IsDetermineNoRingtone(typeColumn, sourceColumn, cardBitType, localRdb_);
 }
 
@@ -207,7 +314,7 @@ bool RingtoneRestoreBase::NeedCommitSettingForNotification()
     if (HasCustomisedNotification()) {
         return false;
     }
-    return !IsDetermineNoRingtoneForNotification(localRdb_);
+    return !initialNoNotification_;
 }
 
 bool RingtoneRestoreBase::HasCustomisedAlarm()
@@ -220,12 +327,11 @@ bool RingtoneRestoreBase::HasCustomisedAlarm()
     return count > 0;
 }
 
-// 有铃音的找不到就是无铃音
 bool RingtoneRestoreBase::IsDetermineNoRingtoneForAlarm(const std::shared_ptr<NativeRdb::RdbStore> &rdbStore)
 {
     string queryCountSql = "SELECT count(1) as count FROM " + RINGTONE_TABLE + " WHERE " +
-        RINGTONE_COLUMN_ALARM_TONE_SOURCE_TYPE +" > 0 AND " +
-        RINGTONE_COLUMN_ALARM_TONE_TYPE + " = " + to_string(NOTIFICATION_TONE_TYPE) +  ";";
+        RINGTONE_COLUMN_ALARM_TONE_SOURCE_TYPE + " > 0 AND " +
+        RINGTONE_COLUMN_ALARM_TONE_TYPE + " = " + to_string(ALARM_TONE_TYPE) + ";";
     RINGTONE_INFO_LOG("queryCountSql: %{public}s", queryCountSql.c_str());
     int32_t count = RingtoneRestoreDbUtils::QueryInt(rdbStore, queryCountSql, "count");
     RINGTONE_INFO_LOG("got no alarm count = %{public}d", count);
@@ -241,7 +347,7 @@ bool RingtoneRestoreBase::NeedCommitSettingForAlarm()
     if (HasCustomisedAlarm()) {
         return false;
     }
-    return !IsDetermineNoRingtoneForAlarm(localRdb_);
+    return true; // !initialNoAlarm_ 无铃声需求上线后更新
 }
 
 void RingtoneRestoreBase::CommitCardSettings(FileInfo &info, int32_t toneTypeBits, int32_t toneSourceType,

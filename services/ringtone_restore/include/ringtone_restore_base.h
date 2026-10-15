@@ -16,6 +16,8 @@
 #ifndef RINGTONE_RESTORE_BASE_H
 #define RINGTONE_RESTORE_BASE_H
 
+#include <map>
+#include <string>
 #include "restore_interface.h"
 #include "ringtone_restore_type.h"
 #include "ringtone_rdb_transaction.h"
@@ -77,11 +79,14 @@ protected:
     void SetNotRingtoneForNotification();
     void ClearLocalDBNotificationRecordTypeSetting(std::string restorePath);
 
-    bool IsDetermineNoRingtoneForAlarm(const std::shared_ptr<NativeRdb::RdbStore> &rdbStore);
     bool HasCustomisedAlarm();
+    bool IsDetermineNoRingtoneForAlarm(const std::shared_ptr<NativeRdb::RdbStore> &rdbStore);
     bool NeedCommitSettingForAlarm();
     void SetNotRingtoneForAlarm();
     void ClearLocalDBAlarmRecordTypeSetting(std::string restorePath);
+
+    void CacheInitialNoRingtoneState();
+    void ClearPresetCardBitsByCustom();
 
     int32_t GetRingtoneLimit(RingtoneMediaType mediaType);
     void UpdateSettingTable(const SimcardSettingAsset &asset, bool forceUpdate = false);
@@ -100,6 +105,9 @@ private:
     int32_t BatchInsert(const std::string &tableName, std::vector<NativeRdb::ValuesBucket> &values, int64_t &rowNum);
     std::shared_ptr<NativeRdb::RdbStore> localRdb_ = nullptr;
     std::unique_ptr<RingtoneSettingManager> settingMgr_ = nullptr;
+    bool initialNoAlarm_ {false};
+    bool initialNoNotification_ {false};
+    std::map<std::string, bool> initialNoRingtoneMap_;
 public:
     RestoreSceneType sceneType_ {-1};
 };

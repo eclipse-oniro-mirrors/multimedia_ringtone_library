@@ -59,7 +59,7 @@ int32_t RingtoneRestore::Init(const std::string &backupPath)
     }
     backupPath_ = backupPath;
     // 以只读模式打开备份DB，用于查询源端ToneFiles和SimCardSetting数据
-    int32_t err = RingtoneRestoreDbUtils::InitDb(restoreRdb_, RINGTONE_LIBRARY_DB_NAME, dbPath_,
+    int32_t err = RingtoneRestoreDbUtils::InitRestoreDb(restoreRdb_, RINGTONE_LIBRARY_DB_NAME, dbPath_,
         RINGTONE_BUNDLE_NAME, true);
     if (err != E_OK) {
         RINGTONE_ERR_LOG("ringtone rdb fail, err = %{public}d", err);
@@ -226,6 +226,8 @@ int32_t RingtoneRestore::StartRestore()
     if (ret != E_OK) {
         return ret;
     }
+    // 在修改本地DB前，缓存B机初始"无铃声"状态，供后续NeedCommitSetting*判断使用
+    CacheInitialNoRingtoneState();
     // 检查备份DB中哪些铃声类型处于"无铃声"状态，同步到本地D
     CheckNotRingtoneRestore();
     // 从备份DB读取SimCardSetting表，更新到本地DB的SimCardSetting表
@@ -240,6 +242,8 @@ int32_t RingtoneRestore::StartRestore()
     }
     // 刷新设置管理器，将CommitSetting中缓存的设置操作持久化到DB
     FlushSettings();
+    // 如果存在自定义来电/短信铃声，清理预置记录中对应的卡位bit
+    ClearPresetCardBitsByCustom();
     // 恢复完成后同步铃声多语言显示名，确保title与当前系统语言一致
     RingtoneLanguageManager::GetInstance()->SyncAssetLanguage();
     return ret;

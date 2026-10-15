@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 Huawei Device Co., Ltd.
+ * Copyright (C) 2023 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -27,6 +27,8 @@ namespace Media {
 class RingtoneRestoreDbUtils {
 public:
     static int32_t InitDb(std::shared_ptr<NativeRdb::RdbStore> &rdbStore, const std::string &dbName,
+        const std::string &dbPath, const std::string &bundleName, bool isMediaLibary);
+    static int32_t InitRestoreDb(std::shared_ptr<NativeRdb::RdbStore> &rdbStore, const std::string &dbName,
         const std::string &dbPath, const std::string &bundleName, bool isMediaLibary);
     static int32_t QueryInt(std::shared_ptr<NativeRdb::RdbStore> rdbStore, const std::string &sql,
         const std::string &column);
