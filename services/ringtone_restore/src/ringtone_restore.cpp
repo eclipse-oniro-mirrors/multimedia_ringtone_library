@@ -242,6 +242,8 @@ int32_t RingtoneRestore::StartRestore()
     }
     // 刷新设置管理器，将CommitSetting中缓存的设置操作持久化到DB
     FlushSettings();
+    // 如果存在自定义来电/短信铃声，清理预置记录中对应的卡位bit
+    ClearPresetCardBitsByCustom();
     // 恢复完成后同步铃声多语言显示名，确保title与当前系统语言一致
     RingtoneLanguageManager::GetInstance()->SyncAssetLanguage();
     return ret;

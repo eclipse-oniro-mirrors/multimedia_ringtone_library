@@ -86,6 +86,7 @@ protected:
     void ClearLocalDBAlarmRecordTypeSetting(std::string restorePath);
 
     void CacheInitialNoRingtoneState();
+    void ClearPresetCardBitsByCustom();
 
     int32_t GetRingtoneLimit(RingtoneMediaType mediaType);
     void UpdateSettingTable(const SimcardSettingAsset &asset, bool forceUpdate = false);
