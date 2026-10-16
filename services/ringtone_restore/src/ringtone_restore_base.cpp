@@ -135,11 +135,12 @@ void RingtoneRestoreBase::CacheInitialNoRingtoneState()
         initialNoAlarm_, initialNoNotification_, initialNoRingtoneMap_.size());
 }
 
-// 收集自定义记录(source_type=2)中指定列的卡位 OR 合集
-static int32_t CollectCustomCardMask(NativeRdb::RdbStore &store, const string &toneTypeColumn)
+// 收集自定义记录(tone_source_type=2)中指定列的卡位 OR 合集
+static int32_t CollectCustomCardMask(NativeRdb::RdbStore &store,
+    const string &toneTypeColumn, const string &toneSourceTypeColumn)
 {
     const string querySql = "SELECT " + toneTypeColumn + " FROM " + RINGTONE_TABLE +
-        " WHERE " + RINGTONE_COLUMN_SOURCE_TYPE + " = " + to_string(SOURCE_TYPE_CUSTOMISED) +
+        " WHERE " + toneSourceTypeColumn + " = " + to_string(SOURCE_TYPE_CUSTOMISED) +
         " AND " + toneTypeColumn + " != 0";
     auto resultSet = store.QuerySql(querySql);
     uint32_t mask = 0;
@@ -154,7 +155,8 @@ static int32_t CollectCustomCardMask(NativeRdb::RdbStore &store, const string &t
 // 清除预置短信铃声记录中与自定义重叠的 shot_tone_type 卡位
 static void ClearPresetShotToneCardBits(NativeRdb::RdbStore &store)
 {
-    int32_t customMask = CollectCustomCardMask(store, RINGTONE_COLUMN_SHOT_TONE_TYPE);
+    int32_t customMask = CollectCustomCardMask(store,
+        RINGTONE_COLUMN_SHOT_TONE_TYPE, RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE);
     RINGTONE_INFO_LOG("ClearPresetShotToneCardBits: customMask=%{public}d", customMask);
     if (customMask == 0) {
         return;
@@ -164,11 +166,10 @@ static void ClearPresetShotToneCardBits(NativeRdb::RdbStore &store)
         RINGTONE_COLUMN_SHOT_TONE_TYPE + " = " +
         RINGTONE_COLUMN_SHOT_TONE_TYPE + " & ~?" +
         " WHERE " + RINGTONE_COLUMN_SHOT_TONE_TYPE + " & ? != 0" +
-        " AND " + RINGTONE_COLUMN_SOURCE_TYPE + " = ?" +
         " AND " + RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE + " = ?";
     int32_t ret = store.ExecuteSql(updateSql,
         { NativeRdb::ValueObject(customMask), NativeRdb::ValueObject(customMask),
-          NativeRdb::ValueObject(SOURCE_TYPE_PRESET), NativeRdb::ValueObject(SOURCE_TYPE_PRESET) });
+          NativeRdb::ValueObject(SOURCE_TYPE_PRESET) });
     if (ret != E_OK) {
         RINGTONE_ERR_LOG("ClearPresetShotToneCardBits failed, ret=%{public}d", ret);
     }
@@ -177,7 +178,8 @@ static void ClearPresetShotToneCardBits(NativeRdb::RdbStore &store)
 // 清除预置来电铃声记录中与自定义重叠的 ring_tone_type 卡位
 static void ClearPresetRingToneCardBits(NativeRdb::RdbStore &store)
 {
-    int32_t customMask = CollectCustomCardMask(store, RINGTONE_COLUMN_RING_TONE_TYPE);
+    int32_t customMask = CollectCustomCardMask(store,
+        RINGTONE_COLUMN_RING_TONE_TYPE, RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE);
     RINGTONE_INFO_LOG("ClearPresetRingToneCardBits: customMask=%{public}d", customMask);
     if (customMask == 0) {
         return;
@@ -187,11 +189,10 @@ static void ClearPresetRingToneCardBits(NativeRdb::RdbStore &store)
         RINGTONE_COLUMN_RING_TONE_TYPE + " = " +
         RINGTONE_COLUMN_RING_TONE_TYPE + " & ~?" +
         " WHERE " + RINGTONE_COLUMN_RING_TONE_TYPE + " & ? != 0" +
-        " AND " + RINGTONE_COLUMN_SOURCE_TYPE + " = ?" +
         " AND " + RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE + " = ?";
     int32_t ret = store.ExecuteSql(updateSql,
         { NativeRdb::ValueObject(customMask), NativeRdb::ValueObject(customMask),
-          NativeRdb::ValueObject(SOURCE_TYPE_PRESET), NativeRdb::ValueObject(SOURCE_TYPE_PRESET) });
+          NativeRdb::ValueObject(SOURCE_TYPE_PRESET) });
     if (ret != E_OK) {
         RINGTONE_ERR_LOG("ClearPresetRingToneCardBits failed, ret=%{public}d", ret);
     }
