@@ -394,6 +394,8 @@ int32_t RingtoneDualFwkRestore::StartRestore()
         ret = InsertTones(infos);
     }
     FlushSettings();
+    // 校验并修复脏数据：ring_mode=1(同步振动) 且 vibrate_file空 且 tone_file非空
+    SanitizeVibrateRecords();
     RingtoneLanguageManager::GetInstance()->SyncAssetLanguage();
     return ret;
 }
