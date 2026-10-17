@@ -350,10 +350,10 @@ struct EsimDefaultToneParam {
 
 // eSIM 默认铃声参数表
 static const EsimDefaultToneParam ESIM_DEFAULT_TONE_PARAMS[] = {
-    { PARAM_RINGTONE_ESIM_CARD_0, "Huawei_Tune_Living.ogg",    ESIM_CARD_1_MASK, true  },
-    { PARAM_RINGTONE_ESIM_CARD_1, "Huawei_Tune_Orchestral.ogg", ESIM_CARD_2_MASK, true  },
-    { PARAM_SYSTEM_TONE_ESIM_CARD_0, "Leap.ogg",                ESIM_CARD_1_MASK, false },
-    { PARAM_SYSTEM_TONE_ESIM_CARD_1, "Leap.ogg",                ESIM_CARD_2_MASK, false },
+    { PARAM_RINGTONE_ESIM_CARD_0, "",    ESIM_CARD_1_MASK, true  },
+    { PARAM_RINGTONE_ESIM_CARD_1, "", ESIM_CARD_2_MASK, true  },
+    { PARAM_SYSTEM_TONE_ESIM_CARD_0, "",                ESIM_CARD_1_MASK, false },
+    { PARAM_SYSTEM_TONE_ESIM_CARD_1, "",                ESIM_CARD_2_MASK, false },
 };
 
 // 对 ToneFiles 表中匹配 display_name 的行，OR 设置 eSIM 卡位比特位（仅当该比特位未设时）
@@ -1118,8 +1118,8 @@ static string QueryVibrateDataByToneFile(NativeRdb::RdbStore &store, const strin
         " AND " + VIBRATE_COLUMN_VIBRATE_TYPE + " IN (" +
         to_string(VIBRATE_TYPE_STANDARD) + ", " + to_string(VIBRATE_TYPE_SALARM) + ", " +
         to_string(VIBRATE_TYPE_SRINGTONE) + ", " + to_string(VIBRATE_TYPE_SNOTIFICATION) + ")";
-    const string CLASSIC_VIBRATE_NAME = "Classic.json";
-    vector<string> fallbackArgs = { CLASSIC_VIBRATE_NAME + "%" };
+    const string classic_vibrate_name = "Classic.json";
+    vector<string> fallbackArgs = { classic_vibrate_name + "%" };
     auto fallbackRs = store.QuerySql(fallbackSql, fallbackArgs);
     if (fallbackRs != nullptr && fallbackRs->GoToFirstRow() == NativeRdb::E_OK) {
         string data = GetStringVal(VIBRATE_COLUMN_DATA, fallbackRs);
