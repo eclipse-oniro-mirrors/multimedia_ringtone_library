@@ -1118,8 +1118,8 @@ static string QueryVibrateDataByToneFile(NativeRdb::RdbStore &store, const strin
         " AND " + VIBRATE_COLUMN_VIBRATE_TYPE + " IN (" +
         to_string(VIBRATE_TYPE_STANDARD) + ", " + to_string(VIBRATE_TYPE_SALARM) + ", " +
         to_string(VIBRATE_TYPE_SRINGTONE) + ", " + to_string(VIBRATE_TYPE_SNOTIFICATION) + ")";
-    const string classic_vibrate_name = "Classic.json";
-    vector<string> fallbackArgs = { classic_vibrate_name + "%" };
+    const string classicVibrateName = "Classic.json";
+    vector<string> fallbackArgs = { classicVibrateName + "%" };
     auto fallbackRs = store.QuerySql(fallbackSql, fallbackArgs);
     if (fallbackRs != nullptr && fallbackRs->GoToFirstRow() == NativeRdb::E_OK) {
         string data = GetStringVal(VIBRATE_COLUMN_DATA, fallbackRs);
