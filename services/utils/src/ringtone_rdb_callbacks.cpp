@@ -1132,25 +1132,70 @@ static string QueryVibrateDataByToneFile(NativeRdb::RdbStore &store, const strin
     return {};
 }
 
+// 策略 D：补查 vibrate_file 并更新
+static bool FixVibrateFile(NativeRdb::RdbStore &store, int32_t mode, int32_t ringtoneType, const string &toneFile)
+{
+    string vibrateData = QueryVibrateDataByToneFile(store, toneFile);
+    if (vibrateData.empty()) {
+        return false;
+    }
+    const string updateSql = "UPDATE " + SIMCARD_SETTING_TABLE +
+        " SET " + SIMCARD_SETTING_COLUMN_VIBRATE_FILE + " = ?" +
+        " WHERE " + SIMCARD_SETTING_COLUMN_MODE + " = ?" +
+        " AND " + SIMCARD_SETTING_COLUMN_RINGTONE_TYPE + " = ?";
+    int32_t err = store.ExecuteSql(updateSql,
+        { NativeRdb::ValueObject(vibrateData),
+          NativeRdb::ValueObject(mode),
+          NativeRdb::ValueObject(ringtoneType) });
+    if (err != NativeRdb::E_OK) {
+        RINGTONE_ERR_LOG("fix vibrate_file failed: mode=%{public}d, type=%{public}d, err=%{public}d",
+            mode, ringtoneType, err);
+        return false;
+    }
+    return true;
+}
+
+// 策略 B：降级 ring_mode=0
+static bool DegradeRingMode(NativeRdb::RdbStore &store, int32_t mode, int32_t ringtoneType)
+{
+    const string degradeSql = "UPDATE " + SIMCARD_SETTING_TABLE +
+        " SET " + SIMCARD_SETTING_COLUMN_RING_MODE + " = 0" +
+        " WHERE " + SIMCARD_SETTING_COLUMN_MODE + " = ?" +
+        " AND " + SIMCARD_SETTING_COLUMN_RINGTONE_TYPE + " = ?";
+    int32_t err = store.ExecuteSql(degradeSql,
+        { NativeRdb::ValueObject(mode),
+          NativeRdb::ValueObject(ringtoneType) });
+    if (err != NativeRdb::E_OK) {
+        RINGTONE_ERR_LOG("degrade ring_mode failed: mode=%{public}d, type=%{public}d, err=%{public}d",
+            mode, ringtoneType, err);
+        return false;
+    }
+    return true;
+}
+
+// 前置检查：VibrateFiles 表是否有记录
+static bool HasVibrateRecords(NativeRdb::RdbStore &store)
+{
+    const string countSql = "SELECT count(1) AS count FROM " + VIBRATE_TABLE;
+    auto countRs = store.QuerySql(countSql);
+    if (countRs == nullptr || countRs->GoToFirstRow() != NativeRdb::E_OK) {
+        if (countRs != nullptr) {
+            countRs->Close();
+        }
+        return false;
+    }
+    int32_t vibrateCount = GetInt32Val("count", countRs);
+    countRs->Close();
+    return vibrateCount > 0;
+}
+
 // 校验并修复脏数据：ring_mode=1(同步振动) 且 vibrate_file 为空 且 tone_file 非空
 // 策略 D：从 tone_file 反推 vibrate display_name 查 VibrateFiles 补填 vibrate_file
 // 策略 B：补查失败则降级 ring_mode=0(NONE)
 static void SanitizeSoundModeVibrateRecords(NativeRdb::RdbStore &store)
 {
     RINGTONE_INFO_LOG("Sanitize SoundMode Vibrate Records Begin");
-    // 前置检查：VibrateFiles 表无记录则跳过
-    const string countSql = "SELECT count(1) AS count FROM " + VIBRATE_TABLE;
-    auto countRs = store.QuerySql(countSql);
-    if (countRs == nullptr || countRs->GoToFirstRow() != NativeRdb::E_OK) {
-        RINGTONE_INFO_LOG("VibrateFiles table empty or query failed, skip sanitize");
-        if (countRs != nullptr) {
-            countRs->Close();
-        }
-        return;
-    }
-    int32_t vibrateCount = GetInt32Val("count", countRs);
-    countRs->Close();
-    if (vibrateCount <= 0) {
+    if (!HasVibrateRecords(store)) {
         RINGTONE_INFO_LOG("VibrateFiles table has no records, skip sanitize");
         return;
     }
@@ -1173,38 +1218,10 @@ static void SanitizeSoundModeVibrateRecords(NativeRdb::RdbStore &store)
         int32_t mode = GetInt32Val(SIMCARD_SETTING_COLUMN_MODE, dirtyRs);
         int32_t ringtoneType = GetInt32Val(SIMCARD_SETTING_COLUMN_RINGTONE_TYPE, dirtyRs);
         string toneFile = GetStringVal(SIMCARD_SETTING_COLUMN_TONE_FILE, dirtyRs);
-        // 策略 D：补查 vibrate_file
-        string vibrateData = QueryVibrateDataByToneFile(store, toneFile);
-        if (!vibrateData.empty()) {
-            const string updateSql = "UPDATE " + SIMCARD_SETTING_TABLE +
-                " SET " + SIMCARD_SETTING_COLUMN_VIBRATE_FILE + " = ?" +
-                " WHERE " + SIMCARD_SETTING_COLUMN_MODE + " = ?" +
-                " AND " + SIMCARD_SETTING_COLUMN_RINGTONE_TYPE + " = ?";
-            int32_t err = store.ExecuteSql(updateSql,
-                { NativeRdb::ValueObject(vibrateData),
-                  NativeRdb::ValueObject(mode),
-                  NativeRdb::ValueObject(ringtoneType) });
-            if (err == NativeRdb::E_OK) {
-                fixed++;
-            } else {
-                RINGTONE_ERR_LOG("fix vibrate_file failed: mode=%{public}d, type=%{public}d, err=%{public}d",
-                    mode, ringtoneType, err);
-            }
-        } else {
-            // 策略 B：降级 ring_mode=0
-            const string degradeSql = "UPDATE " + SIMCARD_SETTING_TABLE +
-                " SET " + SIMCARD_SETTING_COLUMN_RING_MODE + " = 0" +
-                " WHERE " + SIMCARD_SETTING_COLUMN_MODE + " = ?" +
-                " AND " + SIMCARD_SETTING_COLUMN_RINGTONE_TYPE + " = ?";
-            int32_t err = store.ExecuteSql(degradeSql,
-                { NativeRdb::ValueObject(mode),
-                  NativeRdb::ValueObject(ringtoneType) });
-            if (err == NativeRdb::E_OK) {
-                degraded++;
-            } else {
-                RINGTONE_ERR_LOG("degrade ring_mode failed: mode=%{public}d, type=%{public}d, err=%{public}d",
-                    mode, ringtoneType, err);
-            }
+        if (FixVibrateFile(store, mode, ringtoneType, toneFile)) {
+            fixed++;
+        } else if (DegradeRingMode(store, mode, ringtoneType)) {
+            degraded++;
         }
     }
     dirtyRs->Close();
