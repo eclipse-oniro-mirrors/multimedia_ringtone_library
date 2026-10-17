@@ -244,6 +244,8 @@ int32_t RingtoneRestore::StartRestore()
     FlushSettings();
     // 如果存在自定义来电/短信铃声，清理预置记录中对应的卡位bit
     ClearPresetCardBitsByCustom();
+    // 校验并修复脏数据：ring_mode=1(同步振动) 且 vibrate_file空 且 tone_file非空
+    SanitizeVibrateRecords();
     // 恢复完成后同步铃声多语言显示名，确保title与当前系统语言一致
     RingtoneLanguageManager::GetInstance()->SyncAssetLanguage();
     return ret;
