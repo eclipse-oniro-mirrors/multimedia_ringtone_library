@@ -421,41 +421,41 @@ void RingtoneSettingManager::CachePresetCardBits()
         RINGTONE_ERR_LOG("ringtone rdb_ is nullptr");
         return;
     }
-
-    auto buildCache = [this](const string &typeColumn, const string &sourceColumn,
-        std::map<int32_t, PresetCardBitEntry> &cache) {
-        string querySql = "SELECT " + RINGTONE_COLUMN_TONE_ID + ", " + typeColumn + ", " +
-            RINGTONE_COLUMN_DATA + " FROM " + RINGTONE_TABLE +
-            " WHERE " + sourceColumn + " = " + to_string(SOURCE_TYPE_PRESET) +
-            " AND (" + typeColumn + " & " + to_string(ALL_CARD_MASK) + ") != 0;";
-        auto resultSet = ringtoneRdb_->QuerySql(querySql);
-        if (resultSet == nullptr) {
-            return;
-        }
-        static const int32_t cardMasks[] = {SIM_CARD_1_MASK, SIM_CARD_2_MASK, ESIM_CARD_1_MASK, ESIM_CARD_2_MASK};
-        auto ret = resultSet->GoToFirstRow();
-        while (ret == NativeRdb::E_OK) {
-            PresetCardBitEntry entry;
-            string tonePath;
-            int32_t toneType = 0;
-            resultSet->GetInt(0, entry.toneId);
-            resultSet->GetInt(1, toneType);
-            resultSet->GetString(2, tonePath);
-            entry.tonePath = tonePath;
-            for (int32_t mask : cardMasks) {
-                if ((static_cast<uint32_t>(toneType) & static_cast<uint32_t>(mask)) != 0U) {
-                    cache[mask] = entry;
-                }
-            }
-            ret = resultSet->GoToNextRow();
-        }
-        resultSet->Close();
-    };
-
-    buildCache(RINGTONE_COLUMN_SHOT_TONE_TYPE, RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE,
+    BuildPresetCardBitsCache(RINGTONE_COLUMN_SHOT_TONE_TYPE, RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE,
         presetShotCardBitsCache_);
-    buildCache(RINGTONE_COLUMN_RING_TONE_TYPE, RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE,
+    BuildPresetCardBitsCache(RINGTONE_COLUMN_RING_TONE_TYPE, RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE,
         presetRingCardBitsCache_);
+}
+
+void RingtoneSettingManager::BuildPresetCardBitsCache(const string &typeColumn, const string &sourceColumn,
+    std::map<int32_t, PresetCardBitEntry> &cache)
+{
+    string querySql = "SELECT " + RINGTONE_COLUMN_TONE_ID + ", " + typeColumn + ", " +
+        RINGTONE_COLUMN_DATA + " FROM " + RINGTONE_TABLE +
+        " WHERE " + sourceColumn + " = " + to_string(SOURCE_TYPE_PRESET) +
+        " AND (" + typeColumn + " & " + to_string(ALL_CARD_MASK) + ") != 0;";
+    auto resultSet = ringtoneRdb_->QuerySql(querySql);
+    if (resultSet == nullptr) {
+        return;
+    }
+    static const int32_t cardMasks[] = {SIM_CARD_1_MASK, SIM_CARD_2_MASK, ESIM_CARD_1_MASK, ESIM_CARD_2_MASK};
+    auto ret = resultSet->GoToFirstRow();
+    while (ret == NativeRdb::E_OK) {
+        PresetCardBitEntry entry;
+        string tonePath;
+        int32_t toneType = 0;
+        resultSet->GetInt(0, entry.toneId);
+        resultSet->GetInt(1, toneType);
+        resultSet->GetString(2, tonePath);
+        entry.tonePath = tonePath;
+        for (int32_t mask : cardMasks) {
+            if ((static_cast<uint32_t>(toneType) & static_cast<uint32_t>(mask)) != 0U) {
+                cache[mask] = entry;
+            }
+        }
+        ret = resultSet->GoToNextRow();
+    }
+    resultSet->Close();
 }
 
 /*
