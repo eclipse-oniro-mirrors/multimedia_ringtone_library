@@ -87,6 +87,7 @@ protected:
 
     void CacheInitialNoRingtoneState();
     void ClearPresetCardBitsByCustom();
+    void SanitizeVibrateRecords();
 
     int32_t GetRingtoneLimit(RingtoneMediaType mediaType);
     void UpdateSettingTable(const SimcardSettingAsset &asset, bool forceUpdate = false);
