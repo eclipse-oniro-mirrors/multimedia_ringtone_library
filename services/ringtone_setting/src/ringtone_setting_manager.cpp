@@ -176,6 +176,10 @@ void RingtoneSettingManager::SetForceFlush(bool forceFlush)
  */
 void RingtoneSettingManager::FlushSettings()
 {
+    // 在遍历处理前，全量缓存本机SHOT/RINGTONE预置记录的卡位分布。
+    // 后续ApplyCardSettings识别"自定义铃声tonePath与预置同名"的特殊场景，
+    // 跳过ApplyCardSetting避免预置记录被改成CUSTOMISED导致其他卡位bit被"提升"为自定义。
+    CachePresetCardBits();
     TravelSettings([this](string &tonePath, SettingItem &item) -> int32_t {
         if (item.settingType == TONE_SETTING_TYPE_SHOT ||
             item.settingType == TONE_SETTING_TYPE_RINGTONE) {
@@ -186,6 +190,8 @@ void RingtoneSettingManager::FlushSettings()
         return E_OK;
     });
     settings_.clear();
+    presetShotCardBitsCache_.clear();
+    presetRingCardBitsCache_.clear();
 }
 
 int32_t RingtoneSettingManager::PopulateMetadata(const shared_ptr<NativeRdb::ResultSet> &resultSet,
@@ -401,6 +407,58 @@ int32_t RingtoneSettingManager::ClearPresetCardBit(int32_t settingType, int32_t 
 }
 
 /*
+ * CachePresetCardBits: FlushSettings开始前全量缓存本机SHOT/RINGTONE预置记录的卡位分布
+ *
+ * 查询source_type=PRESET的记录, 按其tone_type含哪些卡位bit建立 cardMask->(toneId, tonePath) 映射。
+ * SHOT/RINGTONE分两个独立缓存。一个卡位只对应一条预置记录, 后写入的覆盖前者。
+ * 用于ApplyCardSettings识别"自定义铃声tonePath与预置同名"的特殊场景。
+ */
+void RingtoneSettingManager::CachePresetCardBits()
+{
+    presetShotCardBitsCache_.clear();
+    presetRingCardBitsCache_.clear();
+    if (ringtoneRdb_ == nullptr) {
+        RINGTONE_ERR_LOG("ringtone rdb_ is nullptr");
+        return;
+    }
+
+    auto buildCache = [this](const string &typeColumn, const string &sourceColumn,
+        std::map<int32_t, PresetCardBitEntry> &cache) {
+        string querySql = "SELECT " + RINGTONE_COLUMN_TONE_ID + ", " + typeColumn + ", " +
+            RINGTONE_COLUMN_DATA + " FROM " + RINGTONE_TABLE +
+            " WHERE " + sourceColumn + " = " + to_string(SOURCE_TYPE_PRESET) +
+            " AND (" + typeColumn + " & " + to_string(ALL_CARD_MASK) + ") != 0;";
+        auto resultSet = ringtoneRdb_->QuerySql(querySql);
+        if (resultSet == nullptr) {
+            return;
+        }
+        static const int32_t cardMasks[] = {SIM_CARD_1_MASK, SIM_CARD_2_MASK, ESIM_CARD_1_MASK, ESIM_CARD_2_MASK};
+        auto ret = resultSet->GoToFirstRow();
+        while (ret == NativeRdb::E_OK) {
+            PresetCardBitEntry entry;
+            string tonePath;
+            int32_t toneType = 0;
+            resultSet->GetInt(0, entry.toneId);
+            resultSet->GetInt(1, toneType);
+            resultSet->GetString(2, tonePath);
+            entry.tonePath = tonePath;
+            for (int32_t mask : cardMasks) {
+                if ((static_cast<uint32_t>(toneType) & static_cast<uint32_t>(mask)) != 0U) {
+                    cache[mask] = entry;
+                }
+            }
+            ret = resultSet->GoToNextRow();
+        }
+        resultSet->Close();
+    };
+
+    buildCache(RINGTONE_COLUMN_SHOT_TONE_TYPE, RINGTONE_COLUMN_SHOT_TONE_SOURCE_TYPE,
+        presetShotCardBitsCache_);
+    buildCache(RINGTONE_COLUMN_RING_TONE_TYPE, RINGTONE_COLUMN_RING_TONE_SOURCE_TYPE,
+        presetRingCardBitsCache_);
+}
+
+/*
  * ApplyNonCardSetting: 处理NOTIFICATION/ALARM设置(无卡位概念)
  *
  * 1. 查询本机该类型是否已有自定义(source_type=2)记录
@@ -482,12 +540,63 @@ int32_t RingtoneSettingManager::GetTargetSourceType(const std::string &tonePath)
 }
 
 /*
+ * HasOtherCustomisedForCard: 反查settings_和本机DB, 判断卡位X是否有tonePath之外的自定义记录
+ *
+ * settings_: 待处理的设置项中, 是否有其他tonePath也设了卡位X且sourceType=CUSTOMISED
+ * 本机DB: 是否已有其他CUSTOMISED记录含卡位X (排除当前tonePath)
+ */
+bool RingtoneSettingManager::HasOtherCustomisedForCard(const std::string &tonePath,
+    int32_t settingType, int32_t cardMask)
+{
+    // 反查settings_: 待处理项里是否有其他tonePath也设了同一卡位的自定义
+    for (const auto &entry : settings_) {
+        if (entry.first == tonePath) {
+            continue;
+        }
+        const SettingItem &s = entry.second;
+        if (s.settingType != settingType || s.sourceType != SOURCE_TYPE_CUSTOMISED) {
+            continue;
+        }
+        if ((static_cast<uint32_t>(s.toneType) & static_cast<uint32_t>(cardMask)) != 0U) {
+            return true;
+        }
+    }
+    // 反查本机DB: 是否已有其他CUSTOMISED记录含卡位X
+    return IsCardAlreadyCustomised(settingType, cardMask);
+}
+
+/*
+ * IsPresetTonePath: 判断tonePath是否是缓存中承担卡位X的预置记录的tonePath
+ *
+ * 特殊场景: 自定义铃声文件名与预置铃声同名, tonePath相同。
+ * 此时ApplyCardSetting会把预置记录改成CUSTOMISED, 污染其承担的其他卡位。
+ */
+bool RingtoneSettingManager::IsPresetTonePath(int32_t settingType, int32_t cardMask, const std::string &tonePath)
+{
+    const std::map<int32_t, PresetCardBitEntry> *cache = nullptr;
+    if (settingType == TONE_SETTING_TYPE_SHOT) {
+        cache = &presetShotCardBitsCache_;
+    } else if (settingType == TONE_SETTING_TYPE_RINGTONE) {
+        cache = &presetRingCardBitsCache_;
+    } else {
+        return false;
+    }
+    auto it = cache->find(cardMask);
+    if (it == cache->end()) {
+        return false;
+    }
+    return it->second.tonePath == tonePath;
+}
+
+/*
  * ApplyCardSettings: 逐卡位处理SHOT/RINGTONE设置
  *
  * 遍历卡1~卡4, 对每个卡位:
  * 1. 源机toneType未设此卡 → 跳过
  * 2. 本机此卡已设自定义(source_type=2)且非forceFlush → 跳过
- * 3. 本机此卡未设自定义 → 设置卡位bit + 清理预置记录中该卡位bit
+ * 3. 特殊场景(当前tonePath与预置记录同名) → 跳过ApplyCardSetting, 反查卡位X是否有其他
+ *    自定义记录, 有则清预置卡位bit
+ * 4. 正常场景 → 设置卡位bit + 清理预置记录中该卡位bit
  */
 void RingtoneSettingManager::ApplyCardSettings(const std::string &tonePath, const SettingItem &item)
 {
@@ -511,10 +620,17 @@ void RingtoneSettingManager::ApplyCardSettings(const std::string &tonePath, cons
         if (!forceFlush_ && IsCardAlreadyCustomised(item.settingType, card.mask)) {
             continue;
         }
-        // 3. 设置卡位bit
+        // 3. 特殊场景: 当前tonePath与承担该卡位的预置记录同名, 跳过ApplyCardSetting避免污染预置
+        if (IsPresetTonePath(item.settingType, card.mask, tonePath)) {
+            // 反查卡位X是否有其他自定义记录, 有则清理预置卡位bit让位
+            if (HasOtherCustomisedForCard(tonePath, item.settingType, card.mask)) {
+                ClearPresetCardBit(item.settingType, card.mask);
+            }
+            continue;
+        }
+        // 4. 正常场景: 设置卡位bit + 清理预置记录中该卡位bit
         ApplyCardSetting(tonePath, item.settingType, card.mask, item.sourceType);
         int32_t targetSourceType = GetTargetSourceType(tonePath);
-        // 4. 目标机存在自定义，则需要清理预置记录中该卡位bit，且默认值场景也不能清理
         if (targetSourceType == static_cast<int32_t>(SOURCE_TYPE_CUSTOMISED)) {
             ClearPresetCardBit(item.settingType, card.mask);
         }
