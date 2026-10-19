@@ -74,6 +74,9 @@ private:
     EXPORT int32_t GetTargetSourceType(const std::string &tonePath);
     // FlushSettings开始前全量缓存本机SHOT/RINGTONE预置记录的卡位分布
     void CachePresetCardBits();
+    // 查询指定类型的PRESET记录, 按tone_type含哪些卡位bit建立 cardMask->(toneId, tonePath) 映射
+    void BuildPresetCardBitsCache(const std::string &typeColumn, const std::string &sourceColumn,
+        std::map<int32_t, PresetCardBitEntry> &cache);
     // 判断tonePath是否是缓存中承担卡位X的预置记录的tonePath(特殊场景识别)
     bool IsPresetTonePath(int32_t settingType, int32_t cardMask, const std::string &tonePath);
     // 反查settings_和本机DB, 判断卡位X是否有tonePath之外的自定义记录
