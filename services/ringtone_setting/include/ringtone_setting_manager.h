@@ -16,6 +16,7 @@
 #ifndef RINGTONE_SETTING_MANAGER_H
 #define RINGTONE_SETTING_MANAGER_H
 
+#include <map>
 #include <string>
 #include <unordered_set>
 
@@ -71,10 +72,25 @@ private:
     EXPORT void ApplyCardSettings(const std::string &tonePath, const SettingItem &item);
     // 通过tonePath查询local DB中该记录的source_type
     EXPORT int32_t GetTargetSourceType(const std::string &tonePath);
+    // FlushSettings开始前全量缓存本机SHOT/RINGTONE预置记录的卡位分布
+    void CachePresetCardBits();
+    // 判断tonePath是否是缓存中承担卡位X的预置记录的tonePath(特殊场景识别)
+    bool IsPresetTonePath(int32_t settingType, int32_t cardMask, const std::string &tonePath);
+    // 反查settings_和本机DB, 判断卡位X是否有tonePath之外的自定义记录
+    bool HasOtherCustomisedForCard(const std::string &tonePath, int32_t settingType, int32_t cardMask);
 private:
+    // 预置卡位缓存项: FlushSettings开始时承担某卡位的预置记录toneId与tonePath
+    struct PresetCardBitEntry {
+        int32_t toneId = 0;
+        std::string tonePath;
+    };
     bool forceFlush_ = false;
     std::shared_ptr<NativeRdb::RdbStore> ringtoneRdb_ = nullptr;
     std::unordered_multimap<std::string, SettingItem> settings_ = {};
+    // 预置卡位缓存: cardMask -> 预置记录(toneId + tonePath)，SHOT/RINGTONE分两个缓存
+    // 用于ApplyCardSettings识别"自定义铃声tonePath与预置同名"的特殊场景
+    std::map<int32_t, PresetCardBitEntry> presetShotCardBitsCache_;
+    std::map<int32_t, PresetCardBitEntry> presetRingCardBitsCache_;
 };
 } // namespace Media
 } // namespace OHOS
