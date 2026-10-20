@@ -446,7 +446,7 @@ void RingtoneSettingManager::BuildPresetCardBitsCache(const string &typeColumn, 
         int32_t toneType = 0;
         resultSet->GetInt(0, entry.toneId);
         resultSet->GetInt(1, toneType);
-        resultSet->GetString(2, tonePath);
+        resultSet->GetString(2, tonePath); // 2 path
         entry.tonePath = tonePath;
         for (int32_t mask : cardMasks) {
             if ((static_cast<uint32_t>(toneType) & static_cast<uint32_t>(mask)) != 0U) {
