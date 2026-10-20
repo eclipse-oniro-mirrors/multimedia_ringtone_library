@@ -47,6 +47,11 @@ private:
         int32_t toneType = TONE_TYPE_DEFAULT;
         int32_t sourceType = SOURCE_TYPE_DEFAULT;
     };
+    // 预置卡位缓存项: FlushSettings开始时承担某卡位的预置记录toneId与tonePath
+    struct PresetCardBitEntry {
+        int32_t toneId = 0;
+        std::string tonePath;
+    };
     EXPORT int32_t CommitSettingCompare(int32_t settingType, int32_t toneType, int32_t sourceType);
     EXPORT void TravelSettings(std::function<int32_t (std::string &, SettingItem &)> func);
     EXPORT int32_t PopulateMetadata(const std::shared_ptr<NativeRdb::ResultSet> &resultSet,
@@ -82,11 +87,6 @@ private:
     // 反查settings_和本机DB, 判断卡位X是否有tonePath之外的自定义记录
     bool HasOtherCustomisedForCard(const std::string &tonePath, int32_t settingType, int32_t cardMask);
 private:
-    // 预置卡位缓存项: FlushSettings开始时承担某卡位的预置记录toneId与tonePath
-    struct PresetCardBitEntry {
-        int32_t toneId = 0;
-        std::string tonePath;
-    };
     bool forceFlush_ = false;
     std::shared_ptr<NativeRdb::RdbStore> ringtoneRdb_ = nullptr;
     std::unordered_multimap<std::string, SettingItem> settings_ = {};
