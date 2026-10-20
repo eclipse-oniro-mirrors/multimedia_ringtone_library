@@ -229,7 +229,7 @@ static string DeriveVibrateDisplayNameFromToneFile(const string &toneFile)
     return fileName.substr(0, pos) + VIBRATE_FILE_SUFFIX;
 }
 
-// 在 VibrateFiles 表中按 display_name 前缀匹配查询 data（play_mode=CLASSIC, vibrate_type in S*）
+// 在 VibrateFiles 表中按 display_name 前缀匹配查询 data
 // 查不到则回退查 Classic.json
 static string QueryVibrateDataFromToneFile(NativeRdb::RdbStore &store, const string &toneFile)
 {
@@ -238,12 +238,12 @@ static string QueryVibrateDataFromToneFile(NativeRdb::RdbStore &store, const str
         return {};
     }
     const string querySql = "SELECT " + VIBRATE_COLUMN_DATA + " FROM " + VIBRATE_TABLE +
-        " WHERE " + VIBRATE_COLUMN_DISPLAY_NAME + " LIKE ?" +
+        " WHERE " + VIBRATE_COLUMN_DISPLAY_NAME + " = ?" +
         " AND " + VIBRATE_COLUMN_PLAY_MODE + " = " + to_string(VIBRATE_PLAYMODE_CLASSIC) +
         " AND " + VIBRATE_COLUMN_VIBRATE_TYPE + " IN (" +
         to_string(VIBRATE_TYPE_STANDARD) + ", " + to_string(VIBRATE_TYPE_SALARM) + ", " +
         to_string(VIBRATE_TYPE_SRINGTONE) + ", " + to_string(VIBRATE_TYPE_SNOTIFICATION) + ")";
-    vector<string> args = { vibrateName + "%" };
+    vector<string> args = { vibrateName };
     auto resultSet = store.QuerySql(querySql, args);
     if (resultSet != nullptr && resultSet->GoToFirstRow() == NativeRdb::E_OK) {
         string data = GetStringVal(VIBRATE_COLUMN_DATA, resultSet);
@@ -257,12 +257,12 @@ static string QueryVibrateDataFromToneFile(NativeRdb::RdbStore &store, const str
     }
     // 回退查 Classic.json
     const string fallbackSql = "SELECT " + VIBRATE_COLUMN_DATA + " FROM " + VIBRATE_TABLE +
-        " WHERE " + VIBRATE_COLUMN_DISPLAY_NAME + " LIKE ?" +
+        " WHERE " + VIBRATE_COLUMN_DISPLAY_NAME + " = ?" +
         " AND " + VIBRATE_COLUMN_PLAY_MODE + " = " + to_string(VIBRATE_PLAYMODE_CLASSIC) +
         " AND " + VIBRATE_COLUMN_VIBRATE_TYPE + " IN (" +
         to_string(VIBRATE_TYPE_STANDARD) + ", " + to_string(VIBRATE_TYPE_SALARM) + ", " +
         to_string(VIBRATE_TYPE_SRINGTONE) + ", " + to_string(VIBRATE_TYPE_SNOTIFICATION) + ")";
-    vector<string> fallbackArgs = { VIBRATE_FILE_NAME_STD + "%" };
+    vector<string> fallbackArgs = { VIBRATE_FILE_NAME_STD };
     auto fallbackRs = store.QuerySql(fallbackSql, fallbackArgs);
     if (fallbackRs != nullptr && fallbackRs->GoToFirstRow() == NativeRdb::E_OK) {
         string data = GetStringVal(VIBRATE_COLUMN_DATA, fallbackRs);

@@ -16,6 +16,7 @@
 #ifndef RINGTONE_SETTING_MANAGER_H
 #define RINGTONE_SETTING_MANAGER_H
 
+#include <map>
 #include <string>
 #include <unordered_set>
 
@@ -46,6 +47,11 @@ private:
         int32_t toneType = TONE_TYPE_DEFAULT;
         int32_t sourceType = SOURCE_TYPE_DEFAULT;
     };
+    // 预置卡位缓存项: FlushSettings开始时承担某卡位的预置记录toneId与tonePath
+    struct PresetCardBitEntry {
+        int32_t toneId = 0;
+        std::string tonePath;
+    };
     EXPORT int32_t CommitSettingCompare(int32_t settingType, int32_t toneType, int32_t sourceType);
     EXPORT void TravelSettings(std::function<int32_t (std::string &, SettingItem &)> func);
     EXPORT int32_t PopulateMetadata(const std::shared_ptr<NativeRdb::ResultSet> &resultSet,
@@ -71,10 +77,23 @@ private:
     EXPORT void ApplyCardSettings(const std::string &tonePath, const SettingItem &item);
     // 通过tonePath查询local DB中该记录的source_type
     EXPORT int32_t GetTargetSourceType(const std::string &tonePath);
+    // FlushSettings开始前全量缓存本机SHOT/RINGTONE预置记录的卡位分布
+    void CachePresetCardBits();
+    // 查询指定类型的PRESET记录, 按tone_type含哪些卡位bit建立 cardMask->(toneId, tonePath) 映射
+    void BuildPresetCardBitsCache(const std::string &typeColumn, const std::string &sourceColumn,
+        std::map<int32_t, PresetCardBitEntry> &cache);
+    // 判断tonePath是否是缓存中承担卡位X的预置记录的tonePath(特殊场景识别)
+    bool IsPresetTonePath(int32_t settingType, int32_t cardMask, const std::string &tonePath);
+    // 反查settings_和本机DB, 判断卡位X是否有tonePath之外的自定义记录
+    bool HasOtherCustomisedForCard(const std::string &tonePath, int32_t settingType, int32_t cardMask);
 private:
     bool forceFlush_ = false;
     std::shared_ptr<NativeRdb::RdbStore> ringtoneRdb_ = nullptr;
     std::unordered_multimap<std::string, SettingItem> settings_ = {};
+    // 预置卡位缓存: cardMask -> 预置记录(toneId + tonePath)，SHOT/RINGTONE分两个缓存
+    // 用于ApplyCardSettings识别"自定义铃声tonePath与预置同名"的特殊场景
+    std::map<int32_t, PresetCardBitEntry> presetShotCardBitsCache_;
+    std::map<int32_t, PresetCardBitEntry> presetRingCardBitsCache_;
 };
 } // namespace Media
 } // namespace OHOS
