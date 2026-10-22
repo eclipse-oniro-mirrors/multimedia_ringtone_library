@@ -239,7 +239,6 @@ static string QueryVibrateDataFromToneFile(NativeRdb::RdbStore &store, const str
     }
     const string querySql = "SELECT " + VIBRATE_COLUMN_DATA + " FROM " + VIBRATE_TABLE +
         " WHERE " + VIBRATE_COLUMN_DISPLAY_NAME + " = ?" +
-        " AND " + VIBRATE_COLUMN_PLAY_MODE + " = " + to_string(VIBRATE_PLAYMODE_CLASSIC) +
         " AND " + VIBRATE_COLUMN_VIBRATE_TYPE + " IN (" +
         to_string(VIBRATE_TYPE_STANDARD) + ", " + to_string(VIBRATE_TYPE_SALARM) + ", " +
         to_string(VIBRATE_TYPE_SRINGTONE) + ", " + to_string(VIBRATE_TYPE_SNOTIFICATION) + ")";
