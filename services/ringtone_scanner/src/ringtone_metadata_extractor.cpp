@@ -12,13 +12,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#define MLOG_TAG "Scanner"
+#define MLOG_TAG "RingtoneScanner"
 
 #include "ringtone_metadata_extractor.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <cstdio>
 
 #include "directory_ex.h"
 #include "ringtone_file_utils.h"
@@ -28,6 +29,12 @@
 namespace OHOS {
 namespace Media {
 using namespace std;
+
+namespace {
+// FDSAN owner tag: high 24 bits = LOG_DOMAIN (ringtone library secondary domain),
+// low 32 bits = self-assigned sequential identifier. Type byte = 0 (default).
+constexpr uint64_t RINGTONE_FD_TAG = (static_cast<uint64_t>(LOG_DOMAIN) << 32) | 0x01;
+} // namespace
 
 template <class Type>
 static Type stringToNum(const string &str)
@@ -105,11 +112,11 @@ int32_t RingtoneMetadataExtractor::ExtractAudioMetadata(std::unique_ptr<Ringtone
 
     string absFilePath;
     if (!PathToRealPath(data->GetData(), absFilePath)) {
-        RINGTONE_ERR_LOG("AV RingtoneMetadata is not real path, file path: %{private}s", data->GetData().c_str());
+        RINGTONE_ERR_LOG("AV RingtoneMetadata is not real path, file path: %{public}s", data->GetData().c_str());
         return E_AVMETADATA;
     }
     if (absFilePath.empty()) {
-        RINGTONE_ERR_LOG("Failed to obtain the canonical path for source path: %{private}s %{public}d",
+        RINGTONE_ERR_LOG("Failed to obtain the canonical path for source path: %{public}s %{public}d",
             absFilePath.c_str(), errno);
         return E_AVMETADATA;
     }
@@ -119,17 +126,18 @@ int32_t RingtoneMetadataExtractor::ExtractAudioMetadata(std::unique_ptr<Ringtone
         RINGTONE_ERR_LOG("Open file descriptor failed, errno = %{public}d", errno);
         return E_SYSCALL;
     }
+    fdsan_exchange_owner_tag(fd, 0, RINGTONE_FD_TAG);
     struct stat64 st;
     if (fstat64(fd, &st) != 0) {
         RINGTONE_ERR_LOG("Get file state failed for the given fd");
-        (void)close(fd);
+        fdsan_close_with_tag(fd, RINGTONE_FD_TAG);
         return E_SYSCALL;
     }
 
     int32_t err = avMetadataHelper->SetSource(fd, 0, static_cast<int64_t>(st.st_size), Media::AV_META_USAGE_META_ONLY);
     if (err != 0) {
         RINGTONE_ERR_LOG("SetSource failed for the given file descriptor, err = %{public}d", err);
-        (void)close(fd);
+        fdsan_close_with_tag(fd, RINGTONE_FD_TAG);
         return E_AVMETADATA;
     } else {
         std::unordered_map<int32_t, std::string> resultMap = avMetadataHelper->ResolveMetadata();
@@ -138,7 +146,7 @@ int32_t RingtoneMetadataExtractor::ExtractAudioMetadata(std::unique_ptr<Ringtone
         }
     }
 
-    (void)close(fd);
+    fdsan_close_with_tag(fd, RINGTONE_FD_TAG);
 
     return E_OK;
 }
