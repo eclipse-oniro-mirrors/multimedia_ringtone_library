@@ -457,16 +457,17 @@ static bool GetSafeDestPath(const string &newPath, string &absNewPath)
     }
     string parentDir = newPath.substr(0, lastSlash);
     string fileName = newPath.substr(lastSlash + 1);
-    if (fileName.empty() || fileName.find('/') != std::string::npos) {
+    if (fileName.empty() || fileName == "." || fileName == ".." || fileName.find('/') != std::string::npos) {
         RINGTONE_ERR_LOG("Invalid file name");
         return false;
     }
-    string absParentDir;
-    if (!PathToRealPath(parentDir, absParentDir)) {
+    // 规范化父目录，避免软链/相对路径等导致拼接结果非规范路径
+    char absParentBuf[PATH_MAX] = {0};
+    if (realpath(parentDir.c_str(), absParentBuf) == nullptr) {
         RINGTONE_ERR_LOG("Parent directory not valid");
         return false;
     }
-    absNewPath = absParentDir + "/" + fileName;
+    absNewPath = string(absParentBuf) + "/" + fileName;
     return true;
 }
 
