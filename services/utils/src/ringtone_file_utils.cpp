@@ -540,7 +540,6 @@ int32_t RingtoneFileUtils::CopyFileFromFd(int32_t srcFd, const std::string &newP
     std::string filename;
     std::string dirPath;
     size_t lastSlash = newPath.find_last_of('/');
-
     if (lastSlash != std::string::npos) {
         dirPath = newPath.substr(0, lastSlash);
         filename = newPath.substr(lastSlash + 1);
