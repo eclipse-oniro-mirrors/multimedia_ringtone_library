@@ -35,8 +35,6 @@
 #include "ringtone_tracer.h"
 #include "ringtone_utils.h"
 #ifdef USE_MEDIA_LIBRARY
-#include "userfilemgr_uri.h"
-#include "medialibrary_db_const.h"
 #include "fetch_result.h"
 #include "base_data_uri.h"
 #endif
