@@ -25,6 +25,7 @@
 #include <system_error>
 #include <unistd.h>
 #include <iostream>
+#include <cstdio>
 
 #include "directory_ex.h"
 #include "ringtone_db_const.h"
@@ -43,6 +44,13 @@ using namespace std;
 static const int32_t OPEN_FDS = 128;
 static const mode_t MODE_RWX_USR_GRP = 02771;
 static const mode_t MODE_RW_USR = 0644;
+
+namespace {
+// FDSAN owner tag: high 24 bits = LOG_DOMAIN (ringtone library secondary domain),
+// low 32 bits = self-assigned sequential identifier. Type byte = 0 (default).
+constexpr uint64_t RINGTONE_FD_TAG_SRC = (static_cast<uint64_t>(LOG_DOMAIN) << 32) | 0x01;
+constexpr uint64_t RINGTONE_FD_TAG_DST = (static_cast<uint64_t>(LOG_DOMAIN) << 32) | 0x02;
+} // namespace
 const std::string OLD_RINGTONE_CUSTOMIZED_BASE_RINGTONE_PATH = "/storage/media/local/files/Ringtone";
 const vector<string> EXIF_SUPPORTED_EXTENSION = {
     RINGTONE_CONTAINER_TYPE_3GA,
@@ -449,26 +457,61 @@ static bool GetSafeDestPath(const string &newPath, string &absNewPath)
     }
     string parentDir = newPath.substr(0, lastSlash);
     string fileName = newPath.substr(lastSlash + 1);
-    if (fileName.empty() || fileName.find('/') != std::string::npos) {
+    if (fileName.empty() || fileName == "." || fileName == ".." || fileName.find('/') != std::string::npos) {
         RINGTONE_ERR_LOG("Invalid file name");
         return false;
     }
-    string absParentDir;
-    if (!PathToRealPath(parentDir, absParentDir)) {
+    // 规范化父目录，避免软链/相对路径等导致拼接结果非规范路径
+    char absParentBuf[PATH_MAX] = {0};
+    if (realpath(parentDir.c_str(), absParentBuf) == nullptr) {
         RINGTONE_ERR_LOG("Parent directory not valid");
         return false;
     }
-    absNewPath = absParentDir + "/" + fileName;
+    absNewPath = string(absParentBuf) + "/" + fileName;
     return true;
+}
+
+static bool DoCopyFile(const string &absFilePath, const string &newPath)
+{
+    int32_t source = open(absFilePath.c_str(), O_RDONLY);
+    if (source == -1) {
+        RINGTONE_ERR_LOG("Open failed for source file");
+        return false;
+    }
+    fdsan_exchange_owner_tag(source, 0, RINGTONE_FD_TAG_SRC);
+
+    string absNewPath;
+    if (!GetSafeDestPath(newPath, absNewPath)) {
+        fdsan_close_with_tag(source, RINGTONE_FD_TAG_SRC);
+        return false;
+    }
+    int32_t dest = open(absNewPath.c_str(), O_WRONLY | O_CREAT, MODE_RW_USR);
+    if (dest == -1) {
+        RINGTONE_ERR_LOG("Open failed for destination file %{public}d", errno);
+        fdsan_close_with_tag(source, RINGTONE_FD_TAG_SRC);
+        return false;
+    }
+    fdsan_exchange_owner_tag(dest, 0, RINGTONE_FD_TAG_DST);
+
+    bool ret = false;
+    struct stat fst{};
+    if (fstat(source, &fst) == 0) {
+        // Copy file content
+        if (sendfile(dest, source, nullptr, fst.st_size) != E_ERR) {
+            ret = true;
+        }
+    }
+
+    fdsan_close_with_tag(source, RINGTONE_FD_TAG_SRC);
+    fdsan_close_with_tag(dest, RINGTONE_FD_TAG_DST);
+    return ret;
 }
 
 bool RingtoneFileUtils::CopyFileUtil(const string &filePath, const string &newPath)
 {
-    struct stat fst{};
-    bool ret = false;
     if (filePath.size() >= PATH_MAX) {
         RINGTONE_ERR_LOG("File path too long %{public}d", static_cast<int>(filePath.size()));
-        return ret;
+        return false;
     }
     RINGTONE_INFO_LOG("File path is %{private}s", filePath.c_str());
     string absFilePath;
@@ -479,43 +522,16 @@ bool RingtoneFileUtils::CopyFileUtil(const string &filePath, const string &newPa
     if (!PathToRealPath(filePath, absFilePath)) {
         RINGTONE_ERR_LOG("file is not real path, file path: %{private}s", filePath.c_str());
         ringtoneXCollie.CancelXCollieTimer();
-        return ret;
+        return false;
     }
     ringtoneXCollie.CancelXCollieTimer();
     if (absFilePath.empty()) {
         RINGTONE_ERR_LOG("Failed to obtain the canonical path for source path%{private}s %{public}d",
             filePath.c_str(), errno);
-        return ret;
-    }
-
-    int32_t source = open(absFilePath.c_str(), O_RDONLY);
-    if (source == -1) {
-        RINGTONE_ERR_LOG("Open failed for source file");
-        return ret;
-    }
-    string absNewPath;
-    if (!GetSafeDestPath(newPath, absNewPath)) {
-        close(source);
         return false;
     }
-    int32_t dest = open(absNewPath.c_str(), O_WRONLY | O_CREAT, MODE_RW_USR);
-    if (dest == -1) {
-        RINGTONE_ERR_LOG("Open failed for destination file %{public}d", errno);
-        close(source);
-        return ret;
-    }
 
-    if (fstat(source, &fst) == 0) {
-        // Copy file content
-        if (sendfile(dest, source, nullptr, fst.st_size) != E_ERR) {
-            ret = true;
-        }
-    }
-
-    close(source);
-    close(dest);
-
-    return ret;
+    return DoCopyFile(absFilePath, newPath);
 }
 
 int32_t RingtoneFileUtils::CopyFileFromFd(int32_t srcFd, const std::string &newPath)
@@ -732,7 +748,7 @@ int32_t RingtoneFileUtils::MoveDirectory(const std::string &srcDir, const std::s
 bool CopyRingtoneFolder(const std::filesystem::path& sourcePath, const std::filesystem::path& destinationPath)
 {
     if (!std::filesystem::exists(sourcePath)) {
-        RINGTONE_ERR_LOG("source path is not exists");
+        RINGTONE_ERR_LOG("source path is not exists, errno is %{public}d", errno);
         return false;
     }
     std::error_code ec;
@@ -831,6 +847,7 @@ void RingtoneFileUtils::AccessRingtoneDir()
         }
         CreateRingtoneDir();
     } else { //rename and move file
+        RINGTONE_ERR_LOG("The directory is not empty and lacks group write permission.");
         if (MoveFile(RINGTONE_CUSTOMIZED_BASE_RINGTONE_PATH.c_str(),
             RINGTONE_CUSTOMIZED_BASE_RINGTONETMP_PATH.c_str())) {
             if (CreatePreloadFolder(RINGTONE_CUSTOMIZED_BASE_RINGTONE_PATH.c_str()) != E_SUCCESS) {

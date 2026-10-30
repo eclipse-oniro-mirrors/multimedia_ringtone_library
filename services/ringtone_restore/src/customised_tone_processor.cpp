@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <fstream>
+#include <cstdio>
 
 #include "ringtone_type.h"
 #include "directory_ex.h"
@@ -44,6 +45,12 @@
 namespace OHOS {
 namespace Media {
 using namespace std;
+
+namespace {
+// FDSAN owner tag: high 24 bits = LOG_DOMAIN (ringtone library secondary domain),
+// low 32 bits = self-assigned sequential identifier. Type byte = 0 (default).
+constexpr uint64_t RINGTONE_FD_TAG = (static_cast<uint64_t>(LOG_DOMAIN) << 32) | 0x01;
+} // namespace
 
 CustomisedToneProcessor::CustomisedToneProcessor()
 {
@@ -78,11 +85,12 @@ static int32_t GetFileFd(const std::string &path, int &fd, struct stat64 &st)
     int mode = O_RDONLY;
     fd = open(realPath, mode);
     CHECK_AND_RETURN_RET_LOG(fd > 0, E_FAIL, "open fail path: %{private}s", realPath);
+    fdsan_exchange_owner_tag(fd, 0, RINGTONE_FD_TAG);
 
     int32_t ret = fstat64(fd, &st);
     if (ret != 0) {
         RINGTONE_ERR_LOG("file stat is err, %{public}d, fd: %{public}d", ret, fd);
-        close(fd);
+        fdsan_close_with_tag(fd, RINGTONE_FD_TAG);
         return E_FAIL;
     }
 
@@ -102,12 +110,12 @@ static int32_t GetFileTitleAndDuration(const std::string &path, FileInfo &fileIn
 
     shared_ptr<AVMetadataHelper> avMetadataHelper = AVMetadataHelperFactory::CreateAVMetadataHelper();
     if (avMetadataHelper == nullptr) {
-        close(fd);
+        fdsan_close_with_tag(fd, RINGTONE_FD_TAG);
         return 0;
     }
     int64_t fileLength = static_cast<int64_t>(st.st_size);
     int32_t ret = avMetadataHelper->SetSource(fd, 0, fileLength, AV_META_USAGE_META_ONLY);
-    close(fd);
+    fdsan_close_with_tag(fd, RINGTONE_FD_TAG);
     if (ret != 0) {
         RINGTONE_ERR_LOG("av set source is err");
         return E_FAIL;
