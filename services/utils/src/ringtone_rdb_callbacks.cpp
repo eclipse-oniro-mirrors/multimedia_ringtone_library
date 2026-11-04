@@ -1102,8 +1102,8 @@ static string QueryVibrateDataByToneFile(NativeRdb::RdbStore &store, const strin
     auto resultSet = store.QuerySql(querySql, args);
     if (resultSet != nullptr && resultSet->GoToFirstRow() == NativeRdb::E_OK) {
         string data = GetStringVal(VIBRATE_COLUMN_DATA, resultSet);
-        resultSet->Close();
         if (!data.empty()) {
+            resultSet->Close();
             return data;
         }
     }
