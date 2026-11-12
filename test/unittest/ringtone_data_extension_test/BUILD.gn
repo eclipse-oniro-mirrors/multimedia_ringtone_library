@@ -71,10 +71,11 @@ ohos_unittest("ringtone_data_extension_unittest") {
     "data_share:datashare_provider",
     "ipc:ipc_napi",
     "ipc:ipc_single",
-    "libxml2:libxml2",
+    "libxml2:libxml2",,
     "preferences:native_preferences",
     "relational_store:native_rdb",
     "relational_store:rdb_data_share_adapter",
+    "samgr:samgr_proxy",
   ]
 
   sanitize = {
