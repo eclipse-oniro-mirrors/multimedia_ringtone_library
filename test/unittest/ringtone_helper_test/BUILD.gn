@@ -62,6 +62,7 @@ ohos_unittest("ringtone_helper_unittest") {
     "media_foundation:media_foundation",
     "player_framework:media_client",
     "relational_store:rdb_data_share_adapter",
+    "samgr:samgr_proxy",
   ]
 
   sanitize = {
