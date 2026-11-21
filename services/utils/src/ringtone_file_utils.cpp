@@ -334,10 +334,6 @@ int32_t RingtoneFileUtils::OpenFile(const string &filePath, const string &mode)
         return errCode;
     }
     RINGTONE_INFO_LOG("File absFilePath is %{private}s", absFilePath.c_str());
-    if (absFilePath.size() >= PATH_MAX) {
-        RINGTONE_ERR_LOG("abs file path too long %{public}d", (int)absFilePath.size());
-        return errCode;
-    }
     return open(absFilePath.c_str(), RINGTONE_OPEN_MODE_MAP.at(mode));
 }
 
@@ -445,11 +441,7 @@ bool RingtoneFileUtils::MoveFile(const string &oldPath, const string &newPath)
 
 static bool GetSafeDestPath(const string &newPath, string &absNewPath)
 {
-    bool newPathExists = PathToRealPath(newPath, absNewPath);
-    if (newPathExists) {
-        return true;  // 目标存在，路径已验证
-    }
-    // 目标不存在，校验父目录
+    // 无论目标是否存在，均以父目录的真实路径拼接文件名，避免目标为软链时被解析到非预期路径
     size_t lastSlash = newPath.rfind('/');
     if (lastSlash == std::string::npos) {
         RINGTONE_ERR_LOG("No parent directory in path");
@@ -468,6 +460,9 @@ static bool GetSafeDestPath(const string &newPath, string &absNewPath)
         return false;
     }
     absNewPath = string(absParentBuf) + "/" + fileName;
+    if (absNewPath.size() >= PATH_MAX) {
+        RINGTONE_ERR_LOG("Destination path too long");
+        return false;
     return true;
 }
 
@@ -485,7 +480,7 @@ static bool DoCopyFile(const string &absFilePath, const string &newPath)
         fdsan_close_with_tag(source, RINGTONE_FD_TAG_SRC);
         return false;
     }
-    int32_t dest = open(absNewPath.c_str(), O_WRONLY | O_CREAT, MODE_RW_USR);
+    int32_t dest = open(absNewPath.c_str(), O_WRONLY | O_CREAT | O_NOFOLLOW, MODE_RW_USR);
     if (dest == -1) {
         RINGTONE_ERR_LOG("Open failed for destination file %{public}d", errno);
         fdsan_close_with_tag(source, RINGTONE_FD_TAG_SRC);
@@ -636,10 +631,10 @@ string RingtoneFileUtils::UrlDecode(const string &src)
 {
     string ret;
     char ch;
-    int tmpNum;
+    int tmpNum = 0;
     for (size_t i = 0; i < src.length(); i++) {
         if (src[i]=='%') {
-            if (sscanf_s(src.substr(i + 1, URL_DECODE_DOUBLE).c_str(), "%x", &tmpNum) == -1) {
+            if (sscanf_s(src.substr(i + 1, URL_DECODE_DOUBLE).c_str(), "%x", &tmpNum) <= 0) {
                 RINGTONE_ERR_LOG("Not a valid url: %{private}s", src.c_str());
                 return src;
             }

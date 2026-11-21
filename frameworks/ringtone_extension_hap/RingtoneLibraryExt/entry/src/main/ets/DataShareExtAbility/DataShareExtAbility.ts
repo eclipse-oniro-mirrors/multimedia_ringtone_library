@@ -19,6 +19,10 @@ export default class DataShareExtAbility extends Extension {
   private rdbStore_;
 
   onCreate(want): void {
+    if (want === undefined || want === null) {
+      console.error('[RingtoneDataShare] <<Provider>> DataShareExtAbility onCreate, want is null');
+      return;
+    }
     console.log('[RingtoneDataShare] <<Provider>> DataShareExtAbility onCreate, want:' + want.abilityName);
   }
 

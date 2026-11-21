@@ -58,30 +58,19 @@ int32_t DualFwkConfParser::Parse()
     }
 
     if (!xmlStrcmp(rootNode->name, BAD_CAST"settings")) {
-        xmlChar* xmlVersion = xmlGetProp(rootNode, BAD_CAST"version");
+        std::unique_ptr<xmlChar, decltype(xmlFree)> xmlVersion(
+            xmlGetProp(rootNode, BAD_CAST"version"), xmlFree);
         if (xmlVersion == nullptr) {
             RINGTONE_ERR_LOG("xml version is null");
             return E_ERR;
         }
-        try {
-            version_ = std::stoi((const char *)xmlVersion);
-            RINGTONE_INFO_LOG("xml verison=%{public}d", version_);
-        } catch (const std::invalid_argument& e) {
-            RINGTONE_INFO_LOG("invalid argument: %{public}s", e.what());
-        } catch (const std::out_of_range& e) {
-            RINGTONE_INFO_LOG("out of range: %{public}s", e.what());
-        }
-
-        if (xmlVersion != nullptr) {
-            int32_t value = 0;
-            if (RingtoneUtils::IsNumber((const char *)xmlVersion) &&
-                StringConverter((const char *)xmlVersion, value)) {
-                version_ = value;
-                RINGTONE_INFO_LOG("xml verison=%{public}d", version_);
-                xmlFree(xmlVersion);
-            }
+        int32_t value = 0;
+        if (RingtoneUtils::IsNumber((const char *)xmlVersion.get()) &&
+            StringConverter((const char *)xmlVersion.get(), value)) {
+            version_ = value;
+            RINGTONE_INFO_LOG("xml version=%{public}d", version_);
         } else {
-            RINGTONE_INFO_LOG("xml version is null");
+            RINGTONE_ERR_LOG("invalid xml version");
         }
     } else {
         RINGTONE_ERR_LOG("root node name is not matched");
