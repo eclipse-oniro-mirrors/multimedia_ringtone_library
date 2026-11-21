@@ -441,7 +441,11 @@ bool RingtoneFileUtils::MoveFile(const string &oldPath, const string &newPath)
 
 static bool GetSafeDestPath(const string &newPath, string &absNewPath)
 {
-    // 无论目标是否存在，均以父目录的真实路径拼接文件名，避免目标为软链时被解析到非预期路径
+    bool newPathExists = PathToRealPath(newPath, absNewPath);
+    if (newPathExists) {
+        return true;  // 目标存在，路径已验证
+    }
+    // 目标不存在，校验父目录
     size_t lastSlash = newPath.rfind('/');
     if (lastSlash == std::string::npos) {
         RINGTONE_ERR_LOG("No parent directory in path");
