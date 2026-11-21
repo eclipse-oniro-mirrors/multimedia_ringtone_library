@@ -463,6 +463,7 @@ static bool GetSafeDestPath(const string &newPath, string &absNewPath)
     if (absNewPath.size() >= PATH_MAX) {
         RINGTONE_ERR_LOG("Destination path too long");
         return false;
+    }
     return true;
 }
 
