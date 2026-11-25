@@ -47,9 +47,19 @@ public:
     EXPORT void Finish();
 
 private:
+    // BeginTransaction 单次尝试的结果。把重试循环体拆成独立函数后，主函数只负责
+    // 编排“等待 → 重试 → 判定”，单函数改动量可控，评审更易聚焦。
+    enum class BeginResult {
+        SUCCESS, // 事务已开启，isInTransaction_ 已置 true
+        RETRY,   // 本次未成功（他人在事务中 / DB 被锁），需要重试
+        FAILED   // 不可重试的失败，标志已清理
+    };
+
     int32_t BeginTransaction();
     int32_t TransactionCommit();
     int32_t TransactionRollback();
+    void WaitForTransactionRelease();
+    BeginResult TryBeginTransactionOnce(int32_t &curTryTime);
 
     std::shared_ptr<OHOS::NativeRdb::RdbStore> rdbStore_;
     bool isStart = false;

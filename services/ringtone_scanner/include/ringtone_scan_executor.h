@@ -43,6 +43,9 @@ private:
 
     std::shared_ptr<bool> stopFlag_ = std::make_shared<bool>(false);
     std::condition_variable stopCond;
+    // 并发约定（修复 bug1 后）：isScanFinished 是 stopCond 的谓词变量，所有读写都必须在
+    // queueMtx_ 临界区内完成——HandleScanExecution 持锁写 false/true 并持锁 notify，
+    // Stop() 持锁做 predicate wait。离开该锁访问本字段会重新引入 data race 与丢失唤醒。
     bool isScanFinished = true;
 };
 } // namespace Media

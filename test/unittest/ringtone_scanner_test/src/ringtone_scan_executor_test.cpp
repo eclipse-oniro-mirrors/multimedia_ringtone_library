@@ -48,12 +48,22 @@ HWTEST_F(RingtoneScanExecutorTest, ringtonelib_Commit_test_001, TestSize.Level0)
     std::shared_ptr<RingtoneScannerObj> scanner;
     ringtonescanexecutor->Start();
     int32_t ret = ringtonescanexecutor->Commit(scanner);
-    ringtonescanexecutor->isScanFinished = false;
+    {
+        // isScanFinished 是 stopCond 的谓词变量，按并发约定须在 queueMtx_ 临界区内读写。
+        std::lock_guard<std::mutex> lock(ringtonescanexecutor->queueMtx_);
+        ringtonescanexecutor->isScanFinished = false;
+    }
     std::thread stopThread([ringtonescanexecutor]() {
         ringtonescanexecutor->Stop();
     });
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    ringtonescanexecutor->stopCond.notify_one();
+    {
+        // Stop() 使用谓词 wait，仅 notify 无法唤醒；需模拟 worker 扫描完成，
+        // 持锁将 isScanFinished 置 true 后再通知，否则 Stop() 会永久阻塞导致用例超时。
+        std::lock_guard<std::mutex> lock(ringtonescanexecutor->queueMtx_);
+        ringtonescanexecutor->isScanFinished = true;
+        ringtonescanexecutor->stopCond.notify_one();
+    }
     stopThread.join();
     EXPECT_EQ(ret, 0);
 }
