@@ -319,8 +319,9 @@ static void UpdateDefaultSystemTone(NativeRdb::RdbStore &store)
     RINGTONE_INFO_LOG("setting system tone begin");
     auto infos = RingtoneUtils::GetDefaultSystemtoneInfo();
     for (auto info : infos) {
-        const string querySql = "SELECT tone_id FROM ToneFiles WHERE display_name = "s + "\"" + info.second + "\"";
-        auto resultSet = store.QuerySql(querySql);
+        const string querySql = "SELECT tone_id FROM ToneFiles WHERE display_name = ?";
+        std::vector<std::string> args = { info.second };
+        auto resultSet = store.QuerySql(querySql, args);
         if (resultSet == nullptr || resultSet->GoToFirstRow() != NativeRdb::E_OK) {
             RINGTONE_ERR_LOG("Update operation failed. no resultSet");
             continue;
@@ -387,9 +388,9 @@ static void SetEsimToneBitByDisplayName(NativeRdb::RdbStore &store, const string
         ", " + sourceTypeColumn + " = 1" +
         ", " + RINGTONE_COLUMN_SOURCE_TYPE + " = CASE WHEN " + RINGTONE_COLUMN_SOURCE_TYPE +
         " != 2 THEN 1 ELSE " + RINGTONE_COLUMN_SOURCE_TYPE + " END" +
-        " WHERE " + RINGTONE_COLUMN_DISPLAY_NAME + " = \"" + displayName + "\"" +
+        " WHERE " + RINGTONE_COLUMN_DISPLAY_NAME + " = ?" +
         " AND (" + typeColumn + " & " + std::to_string(cardMask) + ") = 0";
-    int32_t ret = store.ExecuteSql(updateSql);
+    int32_t ret = store.ExecuteSql(updateSql, { NativeRdb::ValueObject(displayName) });
     if (ret != E_OK) {
         RINGTONE_ERR_LOG("SetEsimToneBitByDisplayName failed, cardMask=%{public}d, isRing=%{public}d, ret=%{public}d",
             cardMask, isRingTone, ret);

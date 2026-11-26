@@ -371,8 +371,9 @@ void RingtoneDataShareExtension::DumpDataShareValueBucket(const std::vector<stri
 
         if (std::get_if<std::vector<uint8_t>>(&(valueObject.value))) {
             auto value = static_cast<std::vector<uint8_t>>(valueObject);
+            std::string valueStr(value.begin(), value.end());
             RINGTONE_INFO_LOG("field: %{public}s, value=%{public}s",
-                tab.c_str(), value.data());
+                tab.c_str(), valueStr.c_str());
         } else if (std::get_if<int64_t>(&(valueObject.value))) {
             auto value = static_cast<int64_t>(valueObject);
             RINGTONE_INFO_LOG("field: %{public}s, value=%{public}" PRId64,

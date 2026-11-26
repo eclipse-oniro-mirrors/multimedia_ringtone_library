@@ -25,19 +25,19 @@
 namespace OHOS {
 namespace Media {
 std::shared_ptr<RingtoneScannerManager> RingtoneScannerManager::instance_ = nullptr;
-std::mutex RingtoneScannerManager::instanceMutex_;
+std::once_flag RingtoneScannerManager::instanceOnceFlag_;
 
 std::shared_ptr<RingtoneScannerManager> RingtoneScannerManager::GetInstance()
 {
-    if (instance_ == nullptr) {
-        std::lock_guard<std::mutex> guard(instanceMutex_);
-
-        if (instance_ != nullptr) {
-            return instance_;
-        }
-
+    // 修复 bug4（data race UB）：原 DCL 实现在锁外读 instance_，与锁内 make_shared 的写
+    // 之间没有 happens-before，C++ 标准判定为 data race UB；ARM64 弱内存序下调用方可能
+    // 拿到部分构造的 shared_ptr（对象指针与控制块指针撕裂），解引用后崩溃或堆损坏。
+    // std::call_once 保证：并发首次调用只有一个线程执行构造，其余线程阻塞至构造完成，
+    // 且构造结果通过 once_flag 内部的同步原语对所有线程可见。构造完成后 call_once
+    // 走快速路径，不再有锁竞争。
+    std::call_once(instanceOnceFlag_, [] {
         instance_ = std::make_shared<RingtoneScannerManager>();
-    }
+    });
 
     return instance_;
 }

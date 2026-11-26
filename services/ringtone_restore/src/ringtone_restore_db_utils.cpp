@@ -350,16 +350,16 @@ int32_t RingtoneRestoreDbUtils::CleanESimData(const std::string &dbPath, int32_t
         return E_FAIL;
     }
     RINGTONE_INFO_LOG("Start BackupDb");
-    CHECK_AND_RETURN_RET_LOG(localRdb != nullptr, false, "localRdb is nullptr!");
+    CHECK_AND_RETURN_RET_LOG(localRdb != nullptr, E_HAS_DB_ERROR, "localRdb is nullptr!");
     std::string tmpDir = "/storage/media/local/files/.backup/backup/ringtone_temp_rdb";
     std::string tmpDbPath = tmpDir + "/ringtone_library.db";
     if (!IsFileExists(tmpDir)) {
         RINGTONE_INFO_LOG("Temp backup dir does not exist, skip cleanup");
     }
     CHECK_AND_RETURN_RET_LOG(PreparePath(tmpDbPath) == E_OK,
-        false, "Prepare backup dir failed");
+        E_CHECK_DIR_FAIL, "Prepare backup dir failed");
     int32_t backupErr = localRdb->Backup(tmpDbPath);
-    CHECK_AND_RETURN_RET_LOG(backupErr == 0, false, "rdb backup fail: %{public}d", backupErr);
+    CHECK_AND_RETURN_RET_LOG(backupErr == 0, E_HAS_DB_ERROR, "rdb backup fail: %{public}d", backupErr);
     RINGTONE_INFO_LOG("End BackupDb");
     if (peerSlotNum > 2) { // 2 no need EsimClean
         RINGTONE_INFO_LOG("no need EsimClean");

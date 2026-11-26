@@ -93,7 +93,7 @@ export default class RingtoneBackupExtAbility extends BackupExtensionAbility {
       // peerSlotNum: 传入实际值用于eSIM裁剪；ringtoneBasePath用于过滤未使用自定义铃声
       await this.copyDbAndClean(srcDbPath, tempDbPath, peerSlotNum, ringtoneBasePath);
       const retStr = JSON.stringify({ compatibleDirMapping : ["/storage/media/local/files/.backup/backup/ringtone_temp_rdb/", "/data/storage/el1/database/rdb/"]});
-      console.log(TAG, `onBackupEx end, retStr: ${retStr}`);
+      console.log(TAG, 'onBackupEx end');
       return retStr;
     } catch (err) {
       console.error(TAG, `onBackupEx error: ${err.message}`);
@@ -103,7 +103,7 @@ export default class RingtoneBackupExtAbility extends BackupExtensionAbility {
 
   private async copyDbAndClean(srcPath: string, destPath: string, peerSlotNum: number,
     ringtoneBasePath: string): Promise<void> {
-    console.log(TAG, `copyDbAndClean from ${srcPath} to ${destPath}, peerSlotNum: ${peerSlotNum}`);
+    console.log(TAG, `copyDbAndClean start, peerSlotNum: ${peerSlotNum}`);
     try {
       const dbPath = destPath + 'ringtone_library.db';
       const cleanResult: number = await ringtonerestore.cleanESimData(dbPath, peerSlotNum, ringtoneBasePath);
@@ -136,7 +136,7 @@ export default class RingtoneBackupExtAbility extends BackupExtensionAbility {
     const backupBasePath = this.context.backupDir + 'restore';
     const backupFilePath = backupBasePath + '/data/storage/el2/base/files/Ringtone/';
 
-    console.log(TAG, `onRestoreEx ok ${JSON.stringify(backupFilePath)}`);
+    console.log(TAG, 'onRestoreEx start move rest files');
     let srcPath:string = backupFilePath;
     let destPath:string = ringtonePath;
     let cloneType:number;
@@ -204,7 +204,7 @@ export default class RingtoneBackupExtAbility extends BackupExtensionAbility {
       }
     }
     for (let i = 0; i < conflictList.length; i++) {
-      console.log(TAG, `move conflect file from [${conflictList[i].srcFile}] to [${conflictList[i].destFile}]`);
+      console.log(TAG, 'move conflict file');
       try {
         await this.moveConflictFile(conflictList[i].srcFile, conflictList[i].destFile);
       } catch (err) {
@@ -217,7 +217,7 @@ export default class RingtoneBackupExtAbility extends BackupExtensionAbility {
     let srcStat = fs.statSync(srcFile);
     let dstStat = fs.statSync(dstFile);
     if (srcStat.size === dstStat.size) {
-      console.log(TAG, `conflictFile is same, srcFile: [${srcFile}] size: (${srcStat.size}), dstFile: [${dstFile}] size: (${dstStat.size}), return.`);
+      console.log(TAG, `conflictFile is same, srcSize: (${srcStat.size}), dstSize: (${dstStat.size}), return.`);
       return;
     }
     const srcArr = srcFile.split('/');
